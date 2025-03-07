@@ -7,6 +7,7 @@ import { SmeeModule } from './smee/smee.module'
 import { RoutesModule } from './routes/routes.module'
 import { plainToInstance } from 'class-transformer'
 import { EnvironmentVariables } from 'src/env'
+import { TranslationModule } from './translation/translation.module'
 
 @Module({
   imports: [
@@ -16,7 +17,8 @@ import { EnvironmentVariables } from 'src/env'
     }),
     AuthModule,
     SmeeModule,
-    RoutesModule
+    RoutesModule,
+    TranslationModule
   ],
   controllers: [AppController],
   providers: [AppService]

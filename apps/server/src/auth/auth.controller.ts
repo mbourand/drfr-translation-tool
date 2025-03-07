@@ -1,7 +1,8 @@
-import { Body, Controller, InternalServerErrorException, Logger, Post } from '@nestjs/common'
+import { Body, Controller, Get, InternalServerErrorException, Logger, Post, Req } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { Expose, plainToInstance } from 'class-transformer'
 import { IsNumber, IsString } from 'class-validator'
+import { Request } from 'express'
 import { EnvironmentVariables } from 'src/env'
 import { RoutesService } from 'src/routes/routes.service'
 
@@ -41,6 +42,23 @@ export class AuthController {
     private readonly routesService: RoutesService,
     private readonly configService: ConfigService<EnvironmentVariables>
   ) {}
+
+  @Get('user')
+  async getAuthenticatedUser(@Req() req: Request) {
+    const response = await fetch(this.routesService.GITHUB_ROUTES.AUTHENTICATED_USER, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
+      }
+    })
+
+    if (!response.ok) {
+      throw new InternalServerErrorException(`Failed to fetch data ${response.status} ${response.statusText}`)
+    }
+
+    return (await response.json()) as unknown
+  }
 
   @Post('confirm')
   async confirmAuth(@Body() query: ConfirmAuthQueryDto) {

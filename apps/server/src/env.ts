@@ -6,6 +6,7 @@ const isTrue = ({ value }: { value: string }) => value === 'true'
 export class EnvironmentVariables {
   // Github
   @IsString() GITHUB_BASE_URL: string
+  @IsString() GITHUB_API_BASE_URL: string
   @IsString() GITHUB_APP_CLIENT_ID: string
   @IsString() GITHUB_APP_CLIENT_SECRET: string
   @IsString() GITHUB_APP_WEBHOOK_SECRET: string
