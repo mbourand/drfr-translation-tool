@@ -13,7 +13,15 @@ export class RoutesService {
     return {
       ACCESS_TOKEN: `${baseUrl}/login/oauth/access_token`,
       AUTHENTICATED_USER: `${apiBaseUrl}/user`,
-      LIST_PULL_REQUESTS: (owner: string, repo: string) => `${apiBaseUrl}/repos/${owner}/${repo}/pulls`
+      LIST_PULL_REQUESTS: (owner: string, repo: string) => `${apiBaseUrl}/repos/${owner}/${repo}/pulls`,
+      CREATE_PULL_REQUEST: (owner: string, repo: string) => `${apiBaseUrl}/repos/${owner}/${repo}/pulls`,
+      CREATE_REF: (owner: string, repo: string) => `${apiBaseUrl}/repos/${owner}/${repo}/git/refs`,
+      EDIT_FILE: (owner: string, repo: string, path: string) => `${apiBaseUrl}/repos/${owner}/${repo}/contents/${path}`,
+      READ_FILE: (owner: string, repo: string, path: string) => `${apiBaseUrl}/repos/${owner}/${repo}/contents/${path}`,
+      COMMITS: (owner: string, repo: string, branch: string) =>
+        `${apiBaseUrl}/repos/${owner}/${repo}/commits/${branch}`,
+      ADD_LABEL: (owner: string, repo: string, issueNumber: number) =>
+        `${apiBaseUrl}/repos/${owner}/${repo}/issues/${issueNumber}/labels`
     } as const
   }
 }
