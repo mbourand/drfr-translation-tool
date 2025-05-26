@@ -11,6 +11,14 @@ export class EnvironmentVariables {
   @IsString() GITHUB_APP_CLIENT_SECRET: string
   @IsString() GITHUB_APP_WEBHOOK_SECRET: string
 
+  // Repository Setup
+  @IsString() REPOSITORY_OWNER: string
+  @IsString() REPOSITORY_NAME: string
+  @IsString() REPOSITORY_MAIN_BRANCH: string
+  @IsString() TRANSLATION_LABEL_NAME: string
+  @IsString() TRANSLATION_WIP_LABEL_NAME: string
+  @IsString() TRANSLATION_REVIEW_LABEL_NAME: string
+
   // Smee for local development
   @IsString() @Transform(isTrue) ENABLE_SMEE: boolean
   @IsString() SMEE_GITHUB_WEBHOOK_SOURCE_URL: string

@@ -7,8 +7,8 @@ export class RoutesService {
   constructor(private readonly configService: ConfigService<EnvironmentVariables>) {}
 
   public get GITHUB_ROUTES() {
-    const baseUrl = this.configService.get('GITHUB_BASE_URL', { infer: true })
-    const apiBaseUrl = this.configService.get('GITHUB_API_BASE_URL', { infer: true })
+    const baseUrl = this.configService.getOrThrow('GITHUB_BASE_URL', { infer: true })
+    const apiBaseUrl = this.configService.getOrThrow('GITHUB_API_BASE_URL', { infer: true })
 
     return {
       ACCESS_TOKEN: `${baseUrl}/login/oauth/access_token`,
@@ -21,7 +21,17 @@ export class RoutesService {
       COMMITS: (owner: string, repo: string, branch: string) =>
         `${apiBaseUrl}/repos/${owner}/${repo}/commits/${branch}`,
       ADD_LABEL: (owner: string, repo: string, issueNumber: number) =>
-        `${apiBaseUrl}/repos/${owner}/${repo}/issues/${issueNumber}/labels`
+        `${apiBaseUrl}/repos/${owner}/${repo}/issues/${issueNumber}/labels`,
+      DELETE_LABEL: (owner: string, repo: string, issueNumber: number, labelName: string) =>
+        `${apiBaseUrl}/repos/${owner}/${repo}/issues/${issueNumber}/labels/${labelName}`,
+      GET_BRANCH: (owner: string, repo: string, branch: string) =>
+        `${apiBaseUrl}/repos/${owner}/${repo}/git/ref/heads/${branch}`,
+      TREE_SHA: (owner: string, repo: string, sha: string) => `${apiBaseUrl}/repos/${owner}/${repo}/git/commits/${sha}`,
+      CREATE_BLOB: (owner: string, repo: string) => `${apiBaseUrl}/repos/${owner}/${repo}/git/blobs`,
+      CREATE_TREE: (owner: string, repo: string) => `${apiBaseUrl}/repos/${owner}/${repo}/git/trees`,
+      CREATE_COMMIT: (owner: string, repo: string) => `${apiBaseUrl}/repos/${owner}/${repo}/git/commits`,
+      UPDATE_BRANCH_HEAD: (owner: string, repo: string, branch: string) =>
+        `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${branch}`
     } as const
   }
 }

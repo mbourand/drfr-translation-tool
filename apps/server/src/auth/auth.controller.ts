@@ -62,11 +62,8 @@ export class AuthController {
 
   @Post('confirm')
   async confirmAuth(@Body() query: ConfirmAuthQueryDto) {
-    const clientId = this.configService.get('GITHUB_APP_CLIENT_ID', { infer: true })
-    const clientSecret = this.configService.get('GITHUB_APP_CLIENT_SECRET', { infer: true })
-    if (!clientId || !clientSecret) {
-      throw new InternalServerErrorException('Missing GitHub app env variables')
-    }
+    const clientId = this.configService.getOrThrow('GITHUB_APP_CLIENT_ID', { infer: true })
+    const clientSecret = this.configService.getOrThrow('GITHUB_APP_CLIENT_SECRET', { infer: true })
 
     const urlSearchParams = new URLSearchParams()
     urlSearchParams.append('client_id', clientId)
