@@ -14,25 +14,37 @@ const filePaths = [
     original: 'chapitre-0/strings_en.txt',
     translated: 'chapitre-0/strings_fr.txt',
     name: 'Strings du chapitre 0',
-    category: 'Chapitre 0'
+    category: 'Chapitre 0',
+    pathsInGameFolder: {
+      windows: 'data.win'
+    }
   },
   {
     original: 'chapitre-1/lang_en.json',
     translated: 'chapitre-1/lang_fr.json',
     name: 'Dialogues du chapitre 1',
-    category: 'Chapitre 1'
+    category: 'Chapitre 1',
+    pathsInGameFolder: {
+      windows: 'chapter1_windows/lang/lang_en.json'
+    }
   },
   {
     original: 'chapitre-1/strings_en.txt',
     translated: 'chapitre-1/strings_fr.txt',
     name: 'Strings du chapitre 1',
-    category: 'Chapitre 1'
+    category: 'Chapitre 1',
+    pathsInGameFolder: {
+      windows: 'chapter1_windows/data.win'
+    }
   },
   {
     original: 'chapitre-2/strings_en.txt',
     translated: 'chapitre-2/strings_fr.txt',
     name: 'Strings du chapitre 2',
-    category: 'Chapitre 2'
+    category: 'Chapitre 2',
+    pathsInGameFolder: {
+      windows: 'chapter2_windows/data.win'
+    }
   }
 ]
 
@@ -243,7 +255,7 @@ export class TranslationController {
     const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
 
     const files = await Promise.all(
-      filePaths.map(async ({ original, translated, name, category }) => {
+      filePaths.map(async ({ original, translated, name, category, pathsInGameFolder }) => {
         const originalFileResponse = await fetch(
           this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, original) + `?ref=${branch}`,
           {
@@ -283,6 +295,7 @@ export class TranslationController {
         return {
           category,
           name,
+          pathsInGameFolder,
           translatedPath: translated,
           originalPath: original,
           original: originalFile.download_url,
