@@ -31,7 +31,11 @@ export class RoutesService {
       CREATE_TREE: (owner: string, repo: string) => `${apiBaseUrl}/repos/${owner}/${repo}/git/trees`,
       CREATE_COMMIT: (owner: string, repo: string) => `${apiBaseUrl}/repos/${owner}/${repo}/git/commits`,
       UPDATE_BRANCH_HEAD: (owner: string, repo: string, branch: string) =>
-        `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${branch}`
+        `${apiBaseUrl}/repos/${owner}/${repo}/git/refs/heads/${branch}`,
+      COMPARE_COMMITS: (owner: string, repo: string, base: string, branch: string) =>
+        `${apiBaseUrl}/repos/${owner}/${repo}/compare/${base}...${branch}`,
+      REVIEW_PULL_REQUEST: (owner: string, repo: string, pullNumber: number) =>
+        `${apiBaseUrl}/repos/${owner}/${repo}/pulls/${pullNumber}/reviews`
     } as const
   }
 }

@@ -7,6 +7,7 @@ import * as dayjs from 'dayjs'
 import { Request } from 'express'
 import { CACHE_KEYS } from 'src/cache/cache.constants'
 import { EnvironmentVariables } from 'src/env'
+import { GithubHttpService } from 'src/github/http.service'
 import { RoutesService } from 'src/routes/routes.service'
 
 const filePaths = [
@@ -44,6 +45,24 @@ const filePaths = [
     category: 'Chapitre 2',
     pathsInGameFolder: {
       windows: 'chapter2_windows/data.win'
+    }
+  },
+  {
+    original: 'chapitre-3/strings_en.txt',
+    translated: 'chapitre-3/strings_fr.txt',
+    name: 'Strings du chapitre 3',
+    category: 'Chapitre 3',
+    pathsInGameFolder: {
+      windows: 'chapter3_windows/data.win'
+    }
+  },
+  {
+    original: 'chapitre-4/strings_en.txt',
+    translated: 'chapitre-4/strings_fr.txt',
+    name: 'Strings du chapitre 4',
+    category: 'Chapitre 4',
+    pathsInGameFolder: {
+      windows: 'chapter4_windows/data.win'
     }
   }
 ]
@@ -86,6 +105,7 @@ export class TranslationController {
   constructor(
     private readonly routeService: RoutesService,
     private readonly configService: ConfigService<EnvironmentVariables>,
+    private readonly githubHttpService: GithubHttpService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache
   ) {}
 
@@ -95,16 +115,10 @@ export class TranslationController {
     const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
     const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
 
-    const response = await fetch(
+    const response = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
         `?base=${mainBranch}&state=all`,
-      {
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-        }
-      }
+      { authorization: req.headers.authorization }
     )
 
     if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
@@ -119,15 +133,9 @@ export class TranslationController {
     const translationLabel = this.configService.getOrThrow('TRANSLATION_LABEL_NAME', { infer: true })
     const wipLabel = this.configService.getOrThrow('TRANSLATION_WIP_LABEL_NAME', { infer: true })
 
-    const lastMasterCommitResponse = await fetch(
+    const lastMasterCommitResponse = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.COMMITS(repositoryOwner, repositoryName, mainBranch),
-      {
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-        }
-      }
+      { authorization: req.headers.authorization }
     )
 
     if (!lastMasterCommitResponse.ok)
@@ -142,16 +150,12 @@ export class TranslationController {
     const head = now.format('YYYY-MM-DD-HH-mm-ss-SSS')
     const ref = `refs/heads/${head}`
 
-    const refCreationResponse = await fetch(
+    const refCreationResponse = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.CREATE_REF(repositoryOwner, repositoryName),
       {
         method: 'POST',
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-        },
-        body: JSON.stringify({ ref, sha: lastMasterCommit.sha })
+        authorization: req.headers.authorization,
+        body: { ref, sha: lastMasterCommit.sha }
       }
     )
 
@@ -160,15 +164,9 @@ export class TranslationController {
         `Failed to create branch ${refCreationResponse.status} ${refCreationResponse.statusText} ${await refCreationResponse.text()}`
       )
 
-    const branchIdentifierContentsResponse = await fetch(
+    const branchIdentifierContentsResponse = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, '.branch-identifier') + `?ref=${head}`,
-      {
-        headers: {
-          Accept: 'application/vnd.github.v3+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-        }
-      }
+      { authorization: req.headers.authorization }
     )
 
     if (!branchIdentifierContentsResponse.ok)
@@ -179,21 +177,17 @@ export class TranslationController {
     const branchIdentifierContents = (await branchIdentifierContentsResponse.json()) as { sha: string }
 
     // Edit readme.md to add the branch name at the end
-    const editionResponse = await fetch(
+    const editionResponse = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.EDIT_FILE(repositoryOwner, repositoryName, '.branch-identifier'),
       {
         method: 'PUT',
-        headers: {
-          Accept: 'application/vnd.github.v3+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-        },
-        body: JSON.stringify({
+        authorization: req.headers.authorization,
+        body: {
           message: `Branch identifier for ${head}`,
           content: Buffer.from(head).toString('base64'),
           branch: head,
           sha: branchIdentifierContents.sha
-        })
+        }
       }
     )
 
@@ -202,16 +196,12 @@ export class TranslationController {
         `Failed to edit branch identifier ${editionResponse.status} ${editionResponse.statusText} ${await editionResponse.text()}`
       )
 
-    const pullRequestCreationResponse = await fetch(
+    const pullRequestCreationResponse = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.CREATE_PULL_REQUEST(repositoryOwner, repositoryName),
       {
         method: 'POST',
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-        },
-        body: JSON.stringify({ title: body.name, head, base: mainBranch })
+        authorization: req.headers.authorization,
+        body: { title: body.name, head, base: mainBranch }
       }
     )
 
@@ -222,16 +212,12 @@ export class TranslationController {
 
     const pullRequest = (await pullRequestCreationResponse.json()) as { number: number }
 
-    const addLabelResponse = await fetch(
+    const addLabelResponse = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.ADD_LABEL(repositoryOwner, repositoryName, pullRequest.number),
       {
         method: 'POST',
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-        },
-        body: JSON.stringify([translationLabel, wipLabel])
+        authorization: req.headers.authorization,
+        body: [translationLabel, wipLabel]
       }
     )
 
@@ -256,15 +242,9 @@ export class TranslationController {
 
     const files = await Promise.all(
       filePaths.map(async ({ original, translated, name, category, pathsInGameFolder }) => {
-        const originalFileResponse = await fetch(
+        const originalFileResponse = await this.githubHttpService.fetch(
           this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, original) + `?ref=${branch}`,
-          {
-            headers: {
-              Accept: 'application/vnd.github.v3+json',
-              'X-GitHub-Api-Version': '2022-11-28',
-              ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-            }
-          }
+          { authorization: req.headers.authorization }
         )
 
         if (!originalFileResponse.ok)
@@ -274,15 +254,9 @@ export class TranslationController {
 
         const originalFile = (await originalFileResponse.json()) as { download_url: string }
 
-        const translatedFileResponse = await fetch(
+        const translatedFileResponse = await this.githubHttpService.fetch(
           this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, translated) + `?ref=${branch}`,
-          {
-            headers: {
-              Accept: 'application/vnd.github.v3+json',
-              'X-GitHub-Api-Version': '2022-11-28',
-              ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-            }
-          }
+          { authorization: req.headers.authorization }
         )
 
         if (!translatedFileResponse.ok)
@@ -309,37 +283,89 @@ export class TranslationController {
     return files
   }
 
+  @Get('/files-at-branch-creation')
+  public async getFilesAtBranchCreation(@Req() req: Request, @Query('branch') branch: string) {
+    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
+    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
+    const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
+
+    const commitComparisonResponse = await this.githubHttpService.fetch(
+      this.routeService.GITHUB_ROUTES.COMPARE_COMMITS(repositoryOwner, repositoryName, mainBranch, branch),
+      { authorization: req.headers.authorization }
+    )
+    if (!commitComparisonResponse.ok)
+      throw new Error(
+        `Failed to compare commits ${commitComparisonResponse.status} ${commitComparisonResponse.statusText} ${await commitComparisonResponse.text()}`
+      )
+
+    const commitComparisonData = (await commitComparisonResponse.json()) as { merge_base_commit: { sha: string } }
+
+    const files = await Promise.all(
+      filePaths.map(async ({ original, translated, name, category, pathsInGameFolder }) => {
+        const originalFileResponse = await this.githubHttpService.fetch(
+          this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, original) +
+            `?ref=${commitComparisonData.merge_base_commit.sha}`,
+          { authorization: req.headers.authorization }
+        )
+
+        if (!originalFileResponse.ok)
+          throw new Error(
+            `Failed to read original file ${originalFileResponse.status} ${originalFileResponse.statusText} ${await originalFileResponse.text()}`
+          )
+
+        const originalFile = (await originalFileResponse.json()) as { download_url: string }
+
+        const translatedFileResponse = await this.githubHttpService.fetch(
+          this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, translated) +
+            `?ref=${commitComparisonData.merge_base_commit.sha}`,
+          { authorization: req.headers.authorization }
+        )
+
+        if (!translatedFileResponse.ok)
+          throw new Error(
+            `Failed to read translated file ${translatedFileResponse.status} ${translatedFileResponse.statusText} ${await translatedFileResponse.text()}`
+          )
+
+        const translatedFile = (await translatedFileResponse.json()) as { download_url: string }
+
+        return {
+          category,
+          name,
+          pathsInGameFolder,
+          translatedPath: translated,
+          originalPath: original,
+          original: originalFile.download_url,
+          translated: translatedFile.download_url
+        }
+      })
+    )
+
+    return files
+  }
+
   @Post('/files')
   public async saveFiles(@Req() req: Request, @Body() body: SaveFilesBodyDto) {
     const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
     const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
 
-    const refResponse = await fetch(
+    console.log(`Getting files at branch creation for branch ${body.branch}`)
+
+    const refResponse = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.GET_BRANCH(repositoryOwner, repositoryName, body.branch),
-      {
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-        }
-      }
+      { authorization: req.headers.authorization }
     )
+
     if (!refResponse.ok)
       throw new Error(`Failed to get ref ${refResponse.status} ${refResponse.statusText} ${await refResponse.text()}`)
 
     const refData = (await refResponse.json()) as { object: { sha: string } }
     const commitSha = refData.object.sha
 
-    const treeShaResponse = await fetch(
+    const treeShaResponse = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.TREE_SHA(repositoryOwner, repositoryName, commitSha),
-      {
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-        }
-      }
+      { authorization: req.headers.authorization }
     )
+
     if (!treeShaResponse.ok)
       throw new Error(
         `Failed to get tree sha ${treeShaResponse.status} ${treeShaResponse.statusText} ${await treeShaResponse.text()}`
@@ -349,18 +375,15 @@ export class TranslationController {
     const baseTreeSha = commitData.tree.sha
 
     const blobsPromises = body.files.map(async (file) => {
-      const blobResponse = await fetch(this.routeService.GITHUB_ROUTES.CREATE_BLOB(repositoryOwner, repositoryName), {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-        },
-        body: JSON.stringify({
-          content: file.content,
-          encoding: 'utf-8'
-        })
-      })
+      const blobResponse = await this.githubHttpService.fetch(
+        this.routeService.GITHUB_ROUTES.CREATE_BLOB(repositoryOwner, repositoryName),
+        {
+          method: 'POST',
+          authorization: req.headers.authorization,
+          body: { content: file.content, encoding: 'utf-8' }
+        }
+      )
+
       if (!blobResponse.ok)
         throw new Error(
           `Failed to create blob ${blobResponse.status} ${blobResponse.statusText} ${await blobResponse.text()}`
@@ -377,43 +400,26 @@ export class TranslationController {
 
     const blobs = await Promise.all(blobsPromises)
 
-    console.log({
-      base_tree: baseTreeSha,
-      tree: blobs
-    })
-
-    const newTreeResponse = await fetch(this.routeService.GITHUB_ROUTES.CREATE_TREE(repositoryOwner, repositoryName), {
-      method: 'POST',
-      headers: {
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-      },
-      body: JSON.stringify({
-        base_tree: baseTreeSha,
-        tree: blobs
-      })
-    })
+    const newTreeResponse = await this.githubHttpService.fetch(
+      this.routeService.GITHUB_ROUTES.CREATE_TREE(repositoryOwner, repositoryName),
+      {
+        method: 'POST',
+        authorization: req.headers.authorization,
+        body: { base_tree: baseTreeSha, tree: blobs }
+      }
+    )
     if (!newTreeResponse.ok)
       throw new Error(
         `Failed to create tree ${newTreeResponse.status} ${newTreeResponse.statusText} ${await newTreeResponse.text()}`
       )
     const newTreeData = (await newTreeResponse.json()) as { sha: string }
 
-    const newCommitResponse = await fetch(
+    const newCommitResponse = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.CREATE_COMMIT(repositoryOwner, repositoryName),
       {
         method: 'POST',
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-        },
-        body: JSON.stringify({
-          message: body.message,
-          tree: newTreeData.sha,
-          parents: [commitSha]
-        })
+        authorization: req.headers.authorization,
+        body: { message: body.message, tree: newTreeData.sha, parents: [commitSha] }
       }
     )
     if (!newCommitResponse.ok)
@@ -422,20 +428,15 @@ export class TranslationController {
       )
     const newCommitData = (await newCommitResponse.json()) as { sha: string }
 
-    const updateBranchHeadResponse = await fetch(
+    const updateBranchHeadResponse = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.UPDATE_BRANCH_HEAD(repositoryOwner, repositoryName, body.branch),
       {
         method: 'PATCH',
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-        },
-        body: JSON.stringify({
-          sha: newCommitData.sha
-        })
+        authorization: req.headers.authorization,
+        body: { sha: newCommitData.sha }
       }
     )
+
     if (!updateBranchHeadResponse.ok)
       throw new Error(
         `Failed to update branch head ${updateBranchHeadResponse.status} ${updateBranchHeadResponse.statusText} ${await updateBranchHeadResponse.text()}`
@@ -455,31 +456,18 @@ export class TranslationController {
     const reviewLabel = this.configService.getOrThrow('TRANSLATION_REVIEW_LABEL_NAME', { infer: true })
     const wipLabel = this.configService.getOrThrow('TRANSLATION_WIP_LABEL_NAME', { infer: true })
 
-    const response = await fetch(
+    const response = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
         `?head=${body.branch}&base=${mainBranch}`,
-      {
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-        }
-      }
+      { authorization: req.headers.authorization }
     )
 
     if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
     const pullRequests = (await response.json()) as { number: number }[]
 
-    const deleteLabelResponse = await fetch(
+    const deleteLabelResponse = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.DELETE_LABEL(repositoryOwner, repositoryName, pullRequests[0].number, wipLabel),
-      {
-        method: 'DELETE',
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-        }
-      }
+      { method: 'DELETE', authorization: req.headers.authorization }
     )
 
     if (!deleteLabelResponse.ok)
@@ -487,16 +475,12 @@ export class TranslationController {
         `Failed to delete label from PR ${deleteLabelResponse.status} ${deleteLabelResponse.statusText} ${await deleteLabelResponse.text()}`
       )
 
-    const addLabelResponse = await fetch(
+    const addLabelResponse = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.ADD_LABEL(repositoryOwner, repositoryName, pullRequests[0].number),
       {
         method: 'POST',
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
-        },
-        body: JSON.stringify([translationLabel, reviewLabel])
+        authorization: req.headers.authorization,
+        body: [translationLabel, reviewLabel]
       }
     )
 
@@ -504,6 +488,45 @@ export class TranslationController {
       throw new Error(
         `Failed to add label to PR ${addLabelResponse.status} ${addLabelResponse.statusText} ${await addLabelResponse.text()}`
       )
+
+    return { success: true }
+  }
+
+  @Post('/approve')
+  async approveTranslation(@Req() req: Request, @Body() body: { branch: string }) {
+    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
+    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
+    const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
+
+    const response = await this.githubHttpService.fetch(
+      this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
+        `?head=${body.branch}&base=${mainBranch}`,
+      { authorization: req.headers.authorization }
+    )
+
+    if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
+    const pullRequests = (await response.json()) as { number: number }[]
+
+    if (pullRequests.length === 0) {
+      throw new Error(`No pull request found for branch ${body.branch}`)
+    }
+
+    const pullRequestNumber = pullRequests[0].number
+
+    const reviewResponse = await this.githubHttpService.fetch(
+      `${this.routeService.GITHUB_ROUTES.REVIEW_PULL_REQUEST(repositoryOwner, repositoryName, pullRequestNumber)}`,
+      {
+        method: 'POST',
+        authorization: req.headers.authorization,
+        body: {
+          event: 'APPROVE',
+          body: 'LGTM 👍'
+        }
+      }
+    )
+
+    if (!reviewResponse.ok)
+      throw new Error(`Failed to approve translation ${reviewResponse.status} ${reviewResponse.statusText}`)
 
     return { success: true }
   }
