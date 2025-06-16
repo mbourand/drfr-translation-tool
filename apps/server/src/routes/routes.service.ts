@@ -35,7 +35,13 @@ export class RoutesService {
       COMPARE_COMMITS: (owner: string, repo: string, base: string, branch: string) =>
         `${apiBaseUrl}/repos/${owner}/${repo}/compare/${base}...${branch}`,
       REVIEW_PULL_REQUEST: (owner: string, repo: string, pullNumber: number) =>
-        `${apiBaseUrl}/repos/${owner}/${repo}/pulls/${pullNumber}/reviews`
+        `${apiBaseUrl}/repos/${owner}/${repo}/pulls/${pullNumber}/reviews`,
+      LIST_COMMENTS: (owner: string, repo: string, pullNumber: number) =>
+        `${apiBaseUrl}/repos/${owner}/${repo}/pulls/${pullNumber}/comments`,
+      ADD_COMMENT: (owner: string, repo: string, pullNumber: number) =>
+        `${apiBaseUrl}/repos/${owner}/${repo}/pulls/${pullNumber}/comments`,
+      DELETE_COMMENT: (owner: string, repo: string, commentId: number) =>
+        `${apiBaseUrl}/repos/${owner}/${repo}/pulls/comments/${commentId}`
     } as const
   }
 }

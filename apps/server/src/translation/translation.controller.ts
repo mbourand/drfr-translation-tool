@@ -1,9 +1,8 @@
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager'
-import { Body, Controller, Get, Inject, Logger, Post, Query, Req } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Inject, Logger, Post, Query, Req } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { Type } from 'class-transformer'
 import { IsArray, IsString, ValidateNested } from 'class-validator'
-import * as dayjs from 'dayjs'
 import { Request } from 'express'
 import { CACHE_KEYS } from 'src/cache/cache.constants'
 import { EnvironmentVariables } from 'src/env'
@@ -145,9 +144,11 @@ export class TranslationController {
 
     const lastMasterCommit = (await lastMasterCommitResponse.json()) as { sha: string }
 
-    const now = dayjs()
+    const head = body.name
+      .replace(/([a-z])([A-Z])/g, '$1-$2')
+      .replace(/[\s_]+/g, '-')
+      .toLowerCase()
 
-    const head = now.format('YYYY-MM-DD-HH-mm-ss-SSS')
     const ref = `refs/heads/${head}`
 
     const refCreationResponse = await this.githubHttpService.fetch(
@@ -505,13 +506,18 @@ export class TranslationController {
     )
 
     if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
-    const pullRequests = (await response.json()) as { number: number }[]
+    const pullRequests = (await response.json()) as { number: number; base: { ref: string }; head: { ref: string } }[]
 
     if (pullRequests.length === 0) {
       throw new Error(`No pull request found for branch ${body.branch}`)
     }
 
-    const pullRequestNumber = pullRequests[0].number
+    const pullRequestNumber = pullRequests.find(
+      (pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch
+    )?.number
+    if (!pullRequestNumber) {
+      throw new Error(`No pull request found for branch ${body.branch} with base ${mainBranch}`)
+    }
 
     const reviewResponse = await this.githubHttpService.fetch(
       `${this.routeService.GITHUB_ROUTES.REVIEW_PULL_REQUEST(repositoryOwner, repositoryName, pullRequestNumber)}`,
@@ -527,6 +533,143 @@ export class TranslationController {
 
     if (!reviewResponse.ok)
       throw new Error(`Failed to approve translation ${reviewResponse.status} ${reviewResponse.statusText}`)
+
+    return { success: true }
+  }
+
+  @Get('/comments')
+  async getComments(@Req() req: Request, @Query('branch') branch: string) {
+    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
+    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
+    const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
+
+    const response = await this.githubHttpService.fetch(
+      this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
+        `?head=${branch}&base=${mainBranch}`,
+      { authorization: req.headers.authorization }
+    )
+
+    if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
+    const pullRequests = (await response.json()) as { number: number; base: { ref: string }; head: { ref: string } }[]
+
+    if (pullRequests.length === 0) {
+      throw new Error(`No pull request found for branch ${branch}`)
+    }
+
+    const pullRequestNumber = pullRequests.find((pr) => pr.head.ref === branch && pr.base.ref === mainBranch)?.number
+    if (!pullRequestNumber) {
+      throw new Error(`No pull request found for branch ${branch} with base ${mainBranch}`)
+    }
+
+    const commentsResponse = await this.githubHttpService.fetch(
+      this.routeService.GITHUB_ROUTES.LIST_COMMENTS(repositoryOwner, repositoryName, pullRequestNumber),
+      { authorization: req.headers.authorization }
+    )
+
+    if (!commentsResponse.ok) throw new Error(`Failed to fetch comments ${response.status} ${response.statusText}`)
+    return (await commentsResponse.json()) as unknown
+  }
+
+  @Post('/comment')
+  async postComment(
+    @Req() req: Request,
+    @Body() body: { branch: string; body: string; line: number; filePath: string; inReplyTo?: number }
+  ) {
+    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
+    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
+    const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
+
+    const response = await this.githubHttpService.fetch(
+      this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
+        `?head=${body.branch}&base=${mainBranch}`,
+      { authorization: req.headers.authorization }
+    )
+
+    if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
+    const pullRequests = (await response.json()) as { number: number; base: { ref: string }; head: { ref: string } }[]
+
+    if (pullRequests.length === 0) {
+      throw new Error(`No pull request found for branch ${body.branch}`)
+    }
+
+    const pullRequestNumber = pullRequests.find(
+      (pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch
+    )?.number
+    if (!pullRequestNumber) {
+      throw new Error(`No pull request found for branch ${body.branch} with base ${mainBranch}`)
+    }
+
+    const lastCommitResponse = await this.githubHttpService.fetch(
+      this.routeService.GITHUB_ROUTES.COMMITS(repositoryOwner, repositoryName, body.branch),
+      { authorization: req.headers.authorization }
+    )
+
+    if (!lastCommitResponse.ok)
+      throw new Error(`Failed to retrieve last commit ${lastCommitResponse.status} ${lastCommitResponse.statusText}`)
+
+    const lastCommit = (await lastCommitResponse.json()) as { sha: string }
+
+    const commentResponse = body.inReplyTo
+      ? await this.githubHttpService.fetch(
+          this.routeService.GITHUB_ROUTES.ADD_COMMENT(repositoryOwner, repositoryName, pullRequestNumber),
+          {
+            method: 'POST',
+            authorization: req.headers.authorization,
+            body: {
+              body: body.body,
+              commit_id: lastCommit.sha,
+              path: body.filePath,
+              side: 'RIGHT',
+              line: body.line,
+              subject_type: 'line',
+              in_reply_to: body.inReplyTo
+            }
+          }
+        )
+      : await this.githubHttpService.fetch(
+          this.routeService.GITHUB_ROUTES.REVIEW_PULL_REQUEST(repositoryOwner, repositoryName, pullRequestNumber),
+          {
+            method: 'POST',
+            authorization: req.headers.authorization,
+            body: {
+              event: 'COMMENT',
+              body: '',
+              commit_id: lastCommit.sha,
+              comments: [
+                {
+                  path: body.filePath,
+                  body: body.body,
+                  line: body.line,
+                  side: 'RIGHT'
+                }
+              ]
+            }
+          }
+        )
+
+    if (!commentResponse.ok)
+      throw new Error(
+        `Failed to post comment ${commentResponse.status} ${commentResponse.statusText} ${await commentResponse.text()}`
+      )
+
+    return { success: true }
+  }
+
+  @Delete('/comment')
+  async deleteComment(@Req() req: Request, @Query('commentId') commentId: string) {
+    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
+    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
+
+    const response = await this.githubHttpService.fetch(
+      `${this.routeService.GITHUB_ROUTES.DELETE_COMMENT(repositoryOwner, repositoryName, parseInt(commentId, 10))}`,
+      {
+        method: 'DELETE',
+        authorization: req.headers.authorization
+      }
+    )
+
+    if (!response.ok)
+      throw new Error(`Failed to delete comment ${response.status} ${response.statusText} ${await response.text()}`)
 
     return { success: true }
   }
