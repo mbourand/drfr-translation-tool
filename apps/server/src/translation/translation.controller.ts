@@ -145,6 +145,7 @@ export class TranslationController {
     const lastMasterCommit = (await lastMasterCommitResponse.json()) as { sha: string }
 
     const head = body.name
+      .replace(/[^a-zA-Z0-9_\s]/g, '')
       .replace(/([a-z])([A-Z])/g, '$1-$2')
       .replace(/[\s_]+/g, '-')
       .toLowerCase()
@@ -464,10 +465,21 @@ export class TranslationController {
     )
 
     if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
-    const pullRequests = (await response.json()) as { number: number }[]
+    const pullRequests = (await response.json()) as { number: number; base: { ref: string }; head: { ref: string } }[]
+
+    if (pullRequests.length === 0) {
+      throw new Error(`No pull request found for branch ${body.branch}`)
+    }
+
+    const pullRequestNumber = pullRequests.find(
+      (pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch
+    )?.number
+    if (!pullRequestNumber) {
+      throw new Error(`No pull request found for branch ${body.branch} with base ${mainBranch}`)
+    }
 
     const deleteLabelResponse = await this.githubHttpService.fetch(
-      this.routeService.GITHUB_ROUTES.DELETE_LABEL(repositoryOwner, repositoryName, pullRequests[0].number, wipLabel),
+      this.routeService.GITHUB_ROUTES.DELETE_LABEL(repositoryOwner, repositoryName, pullRequestNumber, wipLabel),
       { method: 'DELETE', authorization: req.headers.authorization }
     )
 
@@ -477,7 +489,7 @@ export class TranslationController {
       )
 
     const addLabelResponse = await this.githubHttpService.fetch(
-      this.routeService.GITHUB_ROUTES.ADD_LABEL(repositoryOwner, repositoryName, pullRequests[0].number),
+      this.routeService.GITHUB_ROUTES.ADD_LABEL(repositoryOwner, repositoryName, pullRequestNumber),
       {
         method: 'POST',
         authorization: req.headers.authorization,
