@@ -685,13 +685,24 @@ export class TranslationController {
         `Failed to post comment ${commentResponse.status} ${commentResponse.statusText} ${await commentResponse.text()}`
       )
 
+    await this.cacheManager.del(CACHE_KEYS.COMMENTS(pullRequestNumber))
+
     return { success: true }
   }
 
   @Delete('/comment')
-  async deleteComment(@Req() req: Request, @Query('commentId') commentId: string) {
+  async deleteComment(
+    @Req() req: Request,
+    @Query('commentId') commentId: string,
+    @Query('pullRequestNumber') pullRequestNumber: string
+  ) {
     const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
     const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
+
+    const pullRequestNumberInt = parseInt(pullRequestNumber, 10)
+    if (isNaN(pullRequestNumberInt)) {
+      throw new Error(`Invalid pull request number: ${pullRequestNumber}`)
+    }
 
     const response = await this.githubHttpService.fetch(
       `${this.routeService.GITHUB_ROUTES.DELETE_COMMENT(repositoryOwner, repositoryName, parseInt(commentId, 10))}`,
@@ -703,6 +714,8 @@ export class TranslationController {
 
     if (!response.ok)
       throw new Error(`Failed to delete comment ${response.status} ${response.statusText} ${await response.text()}`)
+
+    await this.cacheManager.del(CACHE_KEYS.COMMENTS(pullRequestNumberInt))
 
     return { success: true }
   }
