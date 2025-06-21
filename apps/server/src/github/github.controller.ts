@@ -21,7 +21,6 @@ export class GithubController {
       req.headers['x-github-event'] === 'issue_comment' ||
       req.headers['x-github-event'] === 'pull_request_review_thread'
     ) {
-      console.log('Received issue_comment event:', body)
       const pullRequestNumber = (body.pull_request as Record<string, any>)?.number as number
       if (!pullRequestNumber) {
         throw new InternalServerErrorException('Pull Request Number is missing')

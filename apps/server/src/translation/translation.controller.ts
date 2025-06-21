@@ -574,6 +574,7 @@ export class TranslationController {
     }
 
     const cachedComments = await this.cacheManager.get(CACHE_KEYS.COMMENTS(pullRequestNumber))
+    Logger.log(`Cached comments for pull request ${pullRequestNumber}:`, !!cachedComments)
     if (cachedComments) {
       Logger.log(`Returning cached comments for pull request ${pullRequestNumber}`)
       return cachedComments
