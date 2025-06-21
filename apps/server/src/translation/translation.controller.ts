@@ -233,11 +233,11 @@ export class TranslationController {
 
   @Get('/files')
   public async getFiles(@Req() req: Request, @Query('branch') branch: string) {
-    const cachedFiles = await this.cacheManager.get(CACHE_KEYS.FILES(branch))
-    if (cachedFiles) {
-      Logger.log(`Returning cached files for branch ${branch}`)
-      return cachedFiles
-    }
+    // const cachedFiles = await this.cacheManager.get(CACHE_KEYS.FILES(branch))
+    // if (cachedFiles) {
+    //   Logger.log(`Returning cached files for branch ${branch}`)
+    //   return cachedFiles
+    // }
 
     const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
     const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
