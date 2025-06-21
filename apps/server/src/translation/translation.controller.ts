@@ -280,7 +280,7 @@ export class TranslationController {
       })
     )
 
-    await this.cacheManager.set(CACHE_KEYS.FILES(branch), files, 60 * 60)
+    await this.cacheManager.set(CACHE_KEYS.FILES(branch), files, 1000 * 60 * 60)
 
     return files
   }
@@ -597,7 +597,8 @@ export class TranslationController {
       if (!commentsResponse.headers.get('Link')) break
     }
 
-    await this.cacheManager.set(CACHE_KEYS.COMMENTS(pullRequestNumber), comments, 60 * 60)
+    await this.cacheManager.set(CACHE_KEYS.COMMENTS(pullRequestNumber), comments, 1000 * 60 * 60)
+    Logger.log(`Fetched ${comments.length} comments for pull request ${pullRequestNumber}`)
 
     return comments
   }
