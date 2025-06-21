@@ -573,13 +573,32 @@ export class TranslationController {
       throw new Error(`No pull request found for branch ${branch} with base ${mainBranch}`)
     }
 
-    const commentsResponse = await this.githubHttpService.fetch(
-      this.routeService.GITHUB_ROUTES.LIST_COMMENTS(repositoryOwner, repositoryName, pullRequestNumber),
-      { authorization: req.headers.authorization }
-    )
+    const cachedComments = await this.cacheManager.get(CACHE_KEYS.COMMENTS(pullRequestNumber))
+    if (cachedComments) {
+      Logger.log(`Returning cached comments for pull request ${pullRequestNumber}`)
+      return cachedComments
+    }
 
-    if (!commentsResponse.ok) throw new Error(`Failed to fetch comments ${response.status} ${response.statusText}`)
-    return (await commentsResponse.json()) as unknown
+    let comments: unknown[] = []
+    const maxIter = 5
+
+    for (let i = 0; i < maxIter; i++) {
+      const commentsResponse = await this.githubHttpService.fetch(
+        this.routeService.GITHUB_ROUTES.LIST_COMMENTS(repositoryOwner, repositoryName, pullRequestNumber) +
+          '&page=' +
+          (i + 1),
+        { authorization: req.headers.authorization }
+      )
+
+      if (!commentsResponse.ok) throw new Error(`Failed to fetch comments ${response.status} ${response.statusText}`)
+      comments = comments.concat((await commentsResponse.json()) as unknown[])
+
+      if (!commentsResponse.headers.get('Link')) break
+    }
+
+    await this.cacheManager.set(CACHE_KEYS.COMMENTS(pullRequestNumber), comments, 60 * 60)
+
+    return comments
   }
 
   @Post('/comment')
