@@ -592,7 +592,9 @@ export class TranslationController {
       )
 
       if (!commentsResponse.ok) throw new Error(`Failed to fetch comments ${response.status} ${response.statusText}`)
-      comments = comments.concat((await commentsResponse.json()) as unknown[])
+      comments = comments.concat(
+        ((await commentsResponse.json()) as { line?: number }[]).filter((comment) => comment.line != null)
+      )
 
       if (!commentsResponse.headers.get('Link')) break
     }
