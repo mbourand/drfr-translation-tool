@@ -10,6 +10,7 @@ export class EnvironmentVariables {
   @IsString() GITHUB_APP_CLIENT_ID: string
   @IsString() GITHUB_APP_CLIENT_SECRET: string
   @IsString() GITHUB_APP_WEBHOOK_SECRET: string
+  @IsString() GITHUB_API_ACCESS_TOKEN: string
 
   // Repository Setup
   @IsString() REPOSITORY_OWNER: string

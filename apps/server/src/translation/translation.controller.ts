@@ -1,6 +1,7 @@
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager'
 import { Body, Controller, Delete, Get, Inject, Logger, Post, Query, Req } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import { Interval } from '@nestjs/schedule'
 import { Type } from 'class-transformer'
 import { IsArray, IsString, ValidateNested } from 'class-validator'
 import { Request } from 'express'
@@ -65,6 +66,21 @@ const filePaths = [
     }
   }
 ]
+
+const automaticallyTranslatedLines = {
+  'Strings du chapitre 3': 4546,
+  'Strings du chapitre 4': 4217
+}
+
+const isTechnicalString = (line: string) =>
+  line.trim() === '' ||
+  line.startsWith('obj_') ||
+  line.startsWith('scr_') ||
+  line.startsWith('gml_') ||
+  line.startsWith('DEVICE_') ||
+  /^[a-z]+$/.test(line) ||
+  /^[A-Za-z]*_[a-zA-Z0-9_]*$/.test(line) ||
+  /^[a-z]+[A-Z0-9][a-zA-Z0-9]*$/.test(line)
 
 class CreateTranslationDto {
   // @IsString()
@@ -720,5 +736,138 @@ export class TranslationController {
     await this.cacheManager.del(CACHE_KEYS.COMMENTS(pullRequestNumberInt))
 
     return { success: true }
+  }
+
+  @Get('/progression')
+  async getProgression() {
+    const cachedProgression = await this.cacheManager.get(CACHE_KEYS.PROGRESSION)
+    if (cachedProgression) {
+      Logger.log('Returning cached progression')
+      return cachedProgression
+    }
+
+    Logger.log('No cached progression found, computing it...')
+    await this.computeProgression()
+    return this.cacheManager.get(CACHE_KEYS.PROGRESSION)
+  }
+
+  @Interval(12 * 60 * 60 * 1000)
+  async computeProgression() {
+    console.log('Computing progression...')
+    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
+    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
+    const branch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
+    const token = this.configService.getOrThrow('GITHUB_API_ACCESS_TOKEN', { infer: true })
+
+    const files = await Promise.all(
+      filePaths
+        .filter((f) => f.name === 'Strings du chapitre 3' || f.name === 'Strings du chapitre 4')
+        .map(async ({ original, translated, name }) => {
+          const originalFileResponse = await this.githubHttpService.fetch(
+            this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, original) + `?ref=${branch}`,
+            { authorization: `Bearer ${token}` }
+          )
+
+          if (!originalFileResponse.ok)
+            throw new Error(
+              `Failed to read original file ${originalFileResponse.status} ${originalFileResponse.statusText} ${await originalFileResponse.text()}`
+            )
+
+          const originalFile = (await originalFileResponse.json()) as { download_url: string }
+
+          const translatedFileResponse = await this.githubHttpService.fetch(
+            this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, translated) + `?ref=${branch}`,
+            { authorization: `Bearer ${token}` }
+          )
+
+          if (!translatedFileResponse.ok)
+            throw new Error(
+              `Failed to read translated file ${translatedFileResponse.status} ${translatedFileResponse.statusText} ${await translatedFileResponse.text()}`
+            )
+
+          const translatedFile = (await translatedFileResponse.json()) as { download_url: string }
+
+          return {
+            name,
+            original: originalFile.download_url,
+            translated: translatedFile.download_url
+          }
+        })
+    )
+
+    const progressions = await Promise.all(
+      files.map(async (file) => {
+        const originalResponse = await fetch(file.original)
+        if (!originalResponse.ok) {
+          throw new Error(`Failed to fetch original file: ${originalResponse.status} ${originalResponse.statusText}`)
+        }
+
+        const translatedResponse = await fetch(file.translated)
+        if (!translatedResponse.ok) {
+          throw new Error(
+            `Failed to fetch translated file: ${translatedResponse.status} ${translatedResponse.statusText}`
+          )
+        }
+
+        const originalText = (await originalResponse.text()).replaceAll('\r', '')
+        const translatedText = (await translatedResponse.text()).replaceAll('\r', '')
+
+        const originalLines = originalText.split('\n')
+        const translatedLines = translatedText.split('\n')
+
+        let translatedLineCount = 0
+        let totalTranslatableLineCount = 0
+
+        for (let i = 0; i < originalLines.length; i++) {
+          const originalLine = originalLines[i]
+          const translatedLine = translatedLines[i]
+
+          if (originalLine.length < 20 || isTechnicalString(originalLine)) continue
+
+          if (originalLine !== translatedLine) {
+            translatedLineCount++
+          }
+
+          totalTranslatableLineCount++
+        }
+
+        const relevantTranslatedLines = translatedLineCount - automaticallyTranslatedLines[file.name] || 0
+        const relevantTotalLinesToTranslate = totalTranslatableLineCount - automaticallyTranslatedLines[file.name] || 0
+
+        const progression = Math.round((relevantTranslatedLines / relevantTotalLinesToTranslate) * 100)
+
+        Logger.log(
+          `Progression computed: ${progression}% (${relevantTranslatedLines}/${relevantTotalLinesToTranslate})`
+        )
+
+        return {
+          name: file.name,
+          progression: progression,
+          translatedLineCount: relevantTranslatedLines,
+          totalLinesToTranslate: relevantTotalLinesToTranslate
+        }
+      })
+    )
+
+    await this.cacheManager.set(CACHE_KEYS.PROGRESSION, {
+      chapter3: {
+        bible: 70,
+        texts: progressions.find((p) => p.name === 'Strings du chapitre 3')?.progression ?? 0,
+        textures: 8,
+        audio: 0,
+        test: 0
+      },
+      chapter4: {
+        bible: 60,
+        texts: progressions.find((p) => p.name === 'Strings du chapitre 3')?.progression ?? 0,
+        textures: 0,
+        audio: 0,
+        test: 0
+      }
+    })
+  }
+
+  async onModuleInit() {
+    await this.computeProgression()
   }
 }
