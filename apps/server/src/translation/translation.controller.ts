@@ -10,6 +10,11 @@ import { EnvironmentVariables } from 'src/env'
 import { GithubHttpService } from 'src/github/http.service'
 import { RoutesService } from 'src/routes/routes.service'
 
+const progression = {
+  3: 0,
+  4: 0
+}
+
 const filePaths = [
   {
     original: 'chapitre-0/strings_en.txt',
@@ -473,6 +478,7 @@ export class TranslationController {
     const translationLabel = this.configService.getOrThrow('TRANSLATION_LABEL_NAME', { infer: true })
     const reviewLabel = this.configService.getOrThrow('TRANSLATION_REVIEW_LABEL_NAME', { infer: true })
     const wipLabel = this.configService.getOrThrow('TRANSLATION_WIP_LABEL_NAME', { infer: true })
+    const reviewedLabel = this.configService.getOrThrow('TRANSLATION_REVIEWED_LABEL_NAME', { infer: true })
 
     const response = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
@@ -481,21 +487,38 @@ export class TranslationController {
     )
 
     if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
-    const pullRequests = (await response.json()) as { number: number; base: { ref: string }; head: { ref: string } }[]
+    const pullRequests = (await response.json()) as {
+      number: number
+      base: { ref: string }
+      head: { ref: string }
+      labels: { name: string }[]
+    }[]
 
     if (pullRequests.length === 0) {
       throw new Error(`No pull request found for branch ${body.branch}`)
     }
 
-    const pullRequestNumber = pullRequests.find(
-      (pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch
-    )?.number
+    const pullRequest = pullRequests.find((pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch)
+    const pullRequestNumber = pullRequest?.number
     if (!pullRequestNumber) {
       throw new Error(`No pull request found for branch ${body.branch} with base ${mainBranch}`)
     }
 
+    const whichLabelToRemove = pullRequest.labels.find(
+      (label) => label.name === wipLabel || label.name === reviewedLabel
+    )?.name
+
+    if (!whichLabelToRemove) {
+      throw new Error(`No WIP or reviewed label found on pull request ${pullRequestNumber}`)
+    }
+
     const deleteLabelResponse = await this.githubHttpService.fetch(
-      this.routeService.GITHUB_ROUTES.DELETE_LABEL(repositoryOwner, repositoryName, pullRequestNumber, wipLabel),
+      this.routeService.GITHUB_ROUTES.DELETE_LABEL(
+        repositoryOwner,
+        repositoryName,
+        pullRequestNumber,
+        whichLabelToRemove
+      ),
       { method: 'DELETE', authorization: req.headers.authorization }
     )
 
@@ -526,6 +549,9 @@ export class TranslationController {
     const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
     const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
     const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
+    const translationLabel = this.configService.getOrThrow('TRANSLATION_LABEL_NAME', { infer: true })
+    const approveLabel = this.configService.getOrThrow('TRANSLATION_APPROVED_LABEL_NAME', { infer: true })
+    const reviewLabel = this.configService.getOrThrow('TRANSLATION_REVIEW_LABEL_NAME', { infer: true })
 
     const response = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
@@ -547,20 +573,85 @@ export class TranslationController {
       throw new Error(`No pull request found for branch ${body.branch} with base ${mainBranch}`)
     }
 
-    const reviewResponse = await this.githubHttpService.fetch(
-      `${this.routeService.GITHUB_ROUTES.REVIEW_PULL_REQUEST(repositoryOwner, repositoryName, pullRequestNumber)}`,
+    const deleteLabelResponse = await this.githubHttpService.fetch(
+      this.routeService.GITHUB_ROUTES.DELETE_LABEL(repositoryOwner, repositoryName, pullRequestNumber, reviewLabel),
+      { method: 'DELETE', authorization: req.headers.authorization }
+    )
+
+    if (!deleteLabelResponse.ok)
+      throw new Error(
+        `Failed to delete label from PR ${deleteLabelResponse.status} ${deleteLabelResponse.statusText} ${await deleteLabelResponse.text()}`
+      )
+
+    const addLabelResponse = await this.githubHttpService.fetch(
+      this.routeService.GITHUB_ROUTES.ADD_LABEL(repositoryOwner, repositoryName, pullRequestNumber),
       {
         method: 'POST',
         authorization: req.headers.authorization,
-        body: {
-          event: 'APPROVE',
-          body: 'LGTM 👍'
-        }
+        body: [translationLabel, approveLabel]
       }
     )
 
-    if (!reviewResponse.ok)
-      throw new Error(`Failed to approve translation ${reviewResponse.status} ${reviewResponse.statusText}`)
+    if (!addLabelResponse.ok)
+      throw new Error(
+        `Failed to add label to PR ${addLabelResponse.status} ${addLabelResponse.statusText} ${await addLabelResponse.text()}`
+      )
+
+    return { success: true }
+  }
+
+  @Post('/mark-as-reviewed')
+  async markAsReviewed(@Req() req: Request, @Body() body: { branch: string }) {
+    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
+    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
+    const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
+    const translationLabel = this.configService.getOrThrow('TRANSLATION_LABEL_NAME', { infer: true })
+    const reviewedLabel = this.configService.getOrThrow('TRANSLATION_REVIEWED_LABEL_NAME', { infer: true })
+    const reviewLabel = this.configService.getOrThrow('TRANSLATION_REVIEW_LABEL_NAME', { infer: true })
+
+    const response = await this.githubHttpService.fetch(
+      this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
+        `?head=${body.branch}&base=${mainBranch}`,
+      { authorization: req.headers.authorization }
+    )
+
+    if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
+    const pullRequests = (await response.json()) as { number: number; base: { ref: string }; head: { ref: string } }[]
+
+    if (pullRequests.length === 0) {
+      throw new Error(`No pull request found for branch ${body.branch}`)
+    }
+
+    const pullRequestNumber = pullRequests.find(
+      (pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch
+    )?.number
+    if (!pullRequestNumber) {
+      throw new Error(`No pull request found for branch ${body.branch} with base ${mainBranch}`)
+    }
+
+    const deleteLabelResponse = await this.githubHttpService.fetch(
+      this.routeService.GITHUB_ROUTES.DELETE_LABEL(repositoryOwner, repositoryName, pullRequestNumber, reviewLabel),
+      { method: 'DELETE', authorization: req.headers.authorization }
+    )
+
+    if (!deleteLabelResponse.ok)
+      throw new Error(
+        `Failed to delete label from PR ${deleteLabelResponse.status} ${deleteLabelResponse.statusText} ${await deleteLabelResponse.text()}`
+      )
+
+    const addLabelResponse = await this.githubHttpService.fetch(
+      this.routeService.GITHUB_ROUTES.ADD_LABEL(repositoryOwner, repositoryName, pullRequestNumber),
+      {
+        method: 'POST',
+        authorization: req.headers.authorization,
+        body: [translationLabel, reviewedLabel]
+      }
+    )
+
+    if (!addLabelResponse.ok)
+      throw new Error(
+        `Failed to add label to PR ${addLabelResponse.status} ${addLabelResponse.statusText} ${await addLabelResponse.text()}`
+      )
 
     return { success: true }
   }
@@ -869,5 +960,26 @@ export class TranslationController {
 
   async onModuleInit() {
     await this.computeProgression()
+  }
+
+  @Interval(1000 * 60 * 60 * 12)
+  async updateProgression() {
+    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
+    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
+
+    const response = await this.githubHttpService.fetch(
+      this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
+        `?state=all&labels=translation`,
+      { authorization: this.configService.getOrThrow('GITHUB_API_ACCESS_TOKEN', { infer: true }) }
+    )
+
+    if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
+
+    const pullRequests = (await response.json()) as { number: number; title: string }[]
+
+    progression[3] = pullRequests.filter((pr) => pr.title.includes('Chapitre 3')).length
+    progression[4] = pullRequests.filter((pr) => pr.title.includes('Chapitre 4')).length
+
+    Logger.log(`Progression updated: ${JSON.stringify(progression)}`)
   }
 }

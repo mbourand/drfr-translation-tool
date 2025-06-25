@@ -19,6 +19,8 @@ export class EnvironmentVariables {
   @IsString() TRANSLATION_LABEL_NAME: string
   @IsString() TRANSLATION_WIP_LABEL_NAME: string
   @IsString() TRANSLATION_REVIEW_LABEL_NAME: string
+  @IsString() TRANSLATION_APPROVED_LABEL_NAME: string
+  @IsString() TRANSLATION_REVIEWED_LABEL_NAME: string
 
   // Smee for local development
   @IsString() @Transform(isTrue) ENABLE_SMEE: boolean
