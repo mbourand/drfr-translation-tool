@@ -552,6 +552,7 @@ export class TranslationController {
     const translationLabel = this.configService.getOrThrow('TRANSLATION_LABEL_NAME', { infer: true })
     const approveLabel = this.configService.getOrThrow('TRANSLATION_APPROVED_LABEL_NAME', { infer: true })
     const reviewLabel = this.configService.getOrThrow('TRANSLATION_REVIEW_LABEL_NAME', { infer: true })
+    const reviewedLabel = this.configService.getOrThrow('TRANSLATION_REVIEWED_LABEL_NAME', { infer: true })
 
     const response = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
@@ -560,21 +561,39 @@ export class TranslationController {
     )
 
     if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
-    const pullRequests = (await response.json()) as { number: number; base: { ref: string }; head: { ref: string } }[]
+    const pullRequests = (await response.json()) as {
+      number: number
+      base: { ref: string }
+      head: { ref: string }
+      labels: { name: string }[]
+    }[]
 
     if (pullRequests.length === 0) {
       throw new Error(`No pull request found for branch ${body.branch}`)
     }
 
-    const pullRequestNumber = pullRequests.find(
-      (pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch
-    )?.number
-    if (!pullRequestNumber) {
+    const pullRequest = pullRequests.find((pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch)
+    if (!pullRequest) {
       throw new Error(`No pull request found for branch ${body.branch} with base ${mainBranch}`)
     }
 
+    const pullRequestNumber = pullRequest.number
+
+    const whichLabelToRemove = pullRequest.labels.find(
+      (label) => label.name === reviewLabel || label.name === reviewedLabel
+    )?.name
+
+    if (!whichLabelToRemove) {
+      throw new Error(`No WIP or reviewed label found on pull request ${pullRequestNumber}`)
+    }
+
     const deleteLabelResponse = await this.githubHttpService.fetch(
-      this.routeService.GITHUB_ROUTES.DELETE_LABEL(repositoryOwner, repositoryName, pullRequestNumber, reviewLabel),
+      this.routeService.GITHUB_ROUTES.DELETE_LABEL(
+        repositoryOwner,
+        repositoryName,
+        pullRequestNumber,
+        whichLabelToRemove
+      ),
       { method: 'DELETE', authorization: req.headers.authorization }
     )
 
