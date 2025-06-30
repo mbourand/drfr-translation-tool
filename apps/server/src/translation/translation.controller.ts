@@ -137,7 +137,7 @@ export class TranslationController {
 
     const response = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-        `?base=${mainBranch}&state=all`,
+        `?base=${mainBranch}&state=all&sort=updated&direction=desc&per_page=100`,
       { authorization: req.headers.authorization }
     )
 
@@ -482,7 +482,7 @@ export class TranslationController {
 
     const response = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-        `?head=${body.branch}&base=${mainBranch}`,
+        `?head=${body.branch}&base=${mainBranch}&sort=updated&direction=desc&per_page=100`,
       { authorization: req.headers.authorization }
     )
 
@@ -630,7 +630,7 @@ export class TranslationController {
 
     const response = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-        `?head=${body.branch}&base=${mainBranch}`,
+        `?head=${body.branch}&base=${mainBranch}&sort=updated&direction=desc&per_page=100`,
       { authorization: req.headers.authorization }
     )
 
@@ -683,7 +683,7 @@ export class TranslationController {
 
     const response = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-        `?head=${branch}&base=${mainBranch}`,
+        `?head=${branch}&base=${mainBranch}&sort=updated&direction=desc&per_page=100`,
       { authorization: req.headers.authorization }
     )
 
@@ -742,7 +742,7 @@ export class TranslationController {
 
     const response = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-        `?head=${body.branch}&base=${mainBranch}`,
+        `?head=${body.branch}&base=${mainBranch}&sort=updated&direction=desc&per_page=100`,
       { authorization: req.headers.authorization }
     )
 
