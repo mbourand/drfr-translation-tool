@@ -963,7 +963,7 @@ export class TranslationController {
       chapter3: {
         bible: 80,
         texts: progressions.find((p) => p.name === 'Strings du chapitre 3')?.progression ?? 0,
-        textures: 8,
+        textures: 15,
         audio: 0,
         test: 0
       },
