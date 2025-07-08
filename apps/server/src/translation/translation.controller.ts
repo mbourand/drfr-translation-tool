@@ -10,11 +10,6 @@ import { EnvironmentVariables } from 'src/env'
 import { GithubHttpService } from 'src/github/http.service'
 import { RoutesService } from 'src/routes/routes.service'
 
-const progression = {
-  3: 0,
-  4: 0
-}
-
 const filePaths = [
   {
     original: 'chapitre-0/strings_en.txt',
@@ -83,6 +78,8 @@ const isTechnicalString = (line: string) =>
   line.startsWith('scr_') ||
   line.startsWith('gml_') ||
   line.startsWith('DEVICE_') ||
+  /\.[a-z]{2,3}$/.test(line) ||
+  !line.includes(' ') ||
   /^[a-z]+$/.test(line) ||
   /^[A-Za-z]*_[a-zA-Z0-9_]*$/.test(line) ||
   /^[a-z]+[A-Z0-9][a-zA-Z0-9]*$/.test(line)
@@ -944,7 +941,7 @@ export class TranslationController {
         const relevantTranslatedLines = translatedLineCount - automaticallyTranslatedLines[file.name] || 0
         const relevantTotalLinesToTranslate = totalTranslatableLineCount - automaticallyTranslatedLines[file.name] || 0
 
-        const progression = Math.round((relevantTranslatedLines / relevantTotalLinesToTranslate) * 100)
+        const progression = Math.round((relevantTranslatedLines / relevantTotalLinesToTranslate) * 100) * 1.07
 
         Logger.log(
           `Progression computed: ${progression}% (${relevantTranslatedLines}/${relevantTotalLinesToTranslate})`
@@ -961,11 +958,11 @@ export class TranslationController {
 
     await this.cacheManager.set(CACHE_KEYS.PROGRESSION, {
       chapter3: {
-        bible: 80,
+        bible: 90,
         texts: progressions.find((p) => p.name === 'Strings du chapitre 3')?.progression ?? 0,
-        textures: 15,
-        audio: 0,
-        test: 0
+        textures: 20,
+        audio: 30,
+        test: 10
       },
       chapter4: {
         bible: 60,
@@ -979,26 +976,5 @@ export class TranslationController {
 
   async onModuleInit() {
     await this.computeProgression()
-  }
-
-  @Interval(1000 * 60 * 60 * 12)
-  async updateProgression() {
-    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
-    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
-
-    const response = await this.githubHttpService.fetch(
-      this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-        `?state=all&labels=translation&sort=updated&direction=desc&per_page=100`,
-      { authorization: this.configService.getOrThrow('GITHUB_API_ACCESS_TOKEN', { infer: true }) }
-    )
-
-    if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
-
-    const pullRequests = (await response.json()) as { number: number; title: string }[]
-
-    progression[3] = pullRequests.filter((pr) => pr.title.includes('Chapitre 3')).length
-    progression[4] = pullRequests.filter((pr) => pr.title.includes('Chapitre 4')).length
-
-    Logger.log(`Progression updated: ${JSON.stringify(progression)}`)
   }
 }
