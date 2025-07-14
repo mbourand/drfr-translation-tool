@@ -958,11 +958,11 @@ export class TranslationController {
 
     await this.cacheManager.set(CACHE_KEYS.PROGRESSION, {
       chapter3: {
-        bible: 90,
+        bible: 100,
         texts: progressions.find((p) => p.name === 'Strings du chapitre 3')?.progression ?? 0,
-        textures: 20,
+        textures: 50,
         audio: 30,
-        test: 10
+        test: 20
       },
       chapter4: {
         bible: 60,
