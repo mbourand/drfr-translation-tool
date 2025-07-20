@@ -941,7 +941,7 @@ export class TranslationController {
         const relevantTranslatedLines = translatedLineCount - automaticallyTranslatedLines[file.name] || 0
         const relevantTotalLinesToTranslate = totalTranslatableLineCount - automaticallyTranslatedLines[file.name] || 0
 
-        const progression = Math.round((relevantTranslatedLines / relevantTotalLinesToTranslate) * 100 * 1.07)
+        const progression = Math.round((relevantTranslatedLines / relevantTotalLinesToTranslate) * 100 * 1.15)
 
         Logger.log(
           `Progression computed: ${progression}% (${relevantTranslatedLines}/${relevantTotalLinesToTranslate})`
