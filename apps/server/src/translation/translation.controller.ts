@@ -63,10 +63,13 @@ const addReviewerToBody = (
   }
 
   const reviews = getReviews(type, body)
+  if (!reviews.includes(reviewer)) {
+    reviews.push(reviewer)
+  }
 
   return body.replace(
     new RegExp(`${escapeRegExp(prefixToUse)}.*?${escapeRegExp(suffixToUse)}`),
-    `${prefixToUse}${JSON.stringify(reviews.concat([reviewer]))}${suffixToUse}`
+    `${prefixToUse}${JSON.stringify(reviews)}${suffixToUse}`
   )
 }
 
