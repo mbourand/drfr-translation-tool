@@ -36,6 +36,8 @@ export class RoutesService {
         `${apiBaseUrl}/repos/${owner}/${repo}/compare/${base}...${branch}`,
       REVIEW_PULL_REQUEST: (owner: string, repo: string, pullNumber: number) =>
         `${apiBaseUrl}/repos/${owner}/${repo}/pulls/${pullNumber}/reviews`,
+      EDIT_PULL_REQUEST: (owner: string, repo: string, pullNumber: number) =>
+        `${apiBaseUrl}/repos/${owner}/${repo}/pulls/${pullNumber}`,
       LIST_COMMENTS: (owner: string, repo: string, pullNumber: number) =>
         `${apiBaseUrl}/repos/${owner}/${repo}/pulls/${pullNumber}/comments?per_page=100&sort=created&direction=asc`,
       ADD_COMMENT: (owner: string, repo: string, pullNumber: number) =>

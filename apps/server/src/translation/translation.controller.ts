@@ -9,6 +9,107 @@ import { CACHE_KEYS } from 'src/cache/cache.constants'
 import { EnvironmentVariables } from 'src/env'
 import { GithubHttpService } from 'src/github/http.service'
 import { RoutesService } from 'src/routes/routes.service'
+import z from 'zod'
+
+const APPROVED_BY_PREFIX = '[APPROVED_BY]'
+const APPROVED_BY_SUFFIX = '[/APPROVED_BY]'
+const REQUESTED_CHANGES_PREFIX = '[REQUESTED_CHANGES]'
+const REQUESTED_CHANGES_SUFFIX = '[/REQUESTED_CHANGES]'
+
+function escapeRegExp(text: string) {
+  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')
+}
+
+const getReviews = (type: 'approvals' | 'change_requested', body: string | null | undefined) => {
+  if (!body) return []
+
+  const prefixToUse = type === 'approvals' ? APPROVED_BY_PREFIX : REQUESTED_CHANGES_PREFIX
+  const suffixToUse = type === 'approvals' ? APPROVED_BY_SUFFIX : REQUESTED_CHANGES_SUFFIX
+
+  const startIndex = body.indexOf(prefixToUse)
+  const endIndex = body.indexOf(suffixToUse)
+  if (startIndex === -1 || endIndex === -1 || startIndex >= endIndex) return []
+
+  const reviewStr = body.slice(startIndex + prefixToUse.length, endIndex)
+
+  try {
+    const review = z.array(z.string()).parse(JSON.parse(reviewStr || '[]'))
+    return review
+  } catch (e) {
+    console.log(e)
+    return []
+  }
+}
+
+const addReviewerToBody = (
+  type: 'approvals' | 'change_requested',
+  bodyParam: string | null | undefined,
+  reviewer: string
+) => {
+  const body = bodyParam || ''
+
+  const prefixToUse = type === 'approvals' ? APPROVED_BY_PREFIX : REQUESTED_CHANGES_PREFIX
+  const suffixToUse = type === 'approvals' ? APPROVED_BY_SUFFIX : REQUESTED_CHANGES_SUFFIX
+
+  const startIndex = body.indexOf(prefixToUse)
+  const endIndex = body.indexOf(suffixToUse)
+
+  if (startIndex === -1 || endIndex === -1) {
+    return `${prefixToUse}${JSON.stringify([reviewer])}${suffixToUse}\n` + body
+  }
+
+  if (startIndex >= endIndex) {
+    throw new Error(`Invalid body format: pull request contains an invalid ${type} section`)
+  }
+
+  const reviews = getReviews(type, body)
+
+  return body.replace(
+    new RegExp(`${escapeRegExp(prefixToUse)}.*?${escapeRegExp(suffixToUse)}`),
+    `${prefixToUse}${JSON.stringify(reviews.concat([reviewer]))}${suffixToUse}`
+  )
+}
+
+const clearReviewersFromBody = (type: 'approvals' | 'change_requested', bodyParam: string | null | undefined) => {
+  const body = bodyParam || ''
+
+  const prefixToUse = type === 'approvals' ? APPROVED_BY_PREFIX : REQUESTED_CHANGES_PREFIX
+  const suffixToUse = type === 'approvals' ? APPROVED_BY_SUFFIX : REQUESTED_CHANGES_SUFFIX
+
+  return body.replace(
+    new RegExp(`${escapeRegExp(prefixToUse)}.*?${escapeRegExp(suffixToUse)}`),
+    `${prefixToUse}[]${suffixToUse}`
+  )
+}
+
+const removeReviewerFromBody = (
+  type: 'approvals' | 'change_requested',
+  bodyParam: string | null | undefined,
+  reviewer: string
+) => {
+  const body = bodyParam || ''
+
+  const prefixToUse = type === 'approvals' ? APPROVED_BY_PREFIX : REQUESTED_CHANGES_PREFIX
+  const suffixToUse = type === 'approvals' ? APPROVED_BY_SUFFIX : REQUESTED_CHANGES_SUFFIX
+
+  const startIndex = body.indexOf(prefixToUse)
+  const endIndex = body.indexOf(suffixToUse)
+
+  if (startIndex === -1 || endIndex === -1) {
+    return body
+  }
+
+  if (startIndex >= endIndex) {
+    throw new Error(`Invalid body format: pull request contains an invalid ${type} section`)
+  }
+
+  const reviews = getReviews(type, body).filter((r) => r !== reviewer)
+
+  return body.replace(
+    new RegExp(`${escapeRegExp(prefixToUse)}.*?${escapeRegExp(suffixToUse)}`),
+    `${prefixToUse}${JSON.stringify(reviews)}${suffixToUse}`
+  )
+}
 
 const filePaths = [
   {
@@ -221,7 +322,12 @@ export class TranslationController {
       {
         method: 'POST',
         authorization: req.headers.authorization,
-        body: { title: body.name, head, base: mainBranch }
+        body: {
+          title: body.name,
+          head,
+          base: mainBranch,
+          body: '[APPROVED_BY][][/APPROVED_BY]\n[REQUESTED_CHANGES][][/REQUESTED_CHANGES]'
+        }
       }
     )
 
@@ -368,8 +474,6 @@ export class TranslationController {
     const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
     const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
 
-    console.log(`Getting files at branch creation for branch ${body.branch}`)
-
     const refResponse = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.GET_BRANCH(repositoryOwner, repositoryName, body.branch),
       { authorization: req.headers.authorization }
@@ -472,10 +576,7 @@ export class TranslationController {
     const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
     const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
     const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
-    const translationLabel = this.configService.getOrThrow('TRANSLATION_LABEL_NAME', { infer: true })
-    const reviewLabel = this.configService.getOrThrow('TRANSLATION_REVIEW_LABEL_NAME', { infer: true })
     const wipLabel = this.configService.getOrThrow('TRANSLATION_WIP_LABEL_NAME', { infer: true })
-    const reviewedLabel = this.configService.getOrThrow('TRANSLATION_REVIEWED_LABEL_NAME', { infer: true })
 
     const response = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
@@ -489,6 +590,7 @@ export class TranslationController {
       base: { ref: string }
       head: { ref: string }
       labels: { name: string }[]
+      body: string
     }[]
 
     if (pullRequests.length === 0) {
@@ -501,41 +603,34 @@ export class TranslationController {
       throw new Error(`No pull request found for branch ${body.branch} with base ${mainBranch}`)
     }
 
-    const whichLabelToRemove = pullRequest.labels.find(
-      (label) => label.name === wipLabel || label.name === reviewedLabel
-    )?.name
+    const hasWipLabel = pullRequest.labels.some((label) => label.name === wipLabel)
 
-    if (!whichLabelToRemove) {
-      throw new Error(`No WIP or reviewed label found on pull request ${pullRequestNumber}`)
-    }
-
-    const deleteLabelResponse = await this.githubHttpService.fetch(
-      this.routeService.GITHUB_ROUTES.DELETE_LABEL(
-        repositoryOwner,
-        repositoryName,
-        pullRequestNumber,
-        whichLabelToRemove
-      ),
-      { method: 'DELETE', authorization: req.headers.authorization }
-    )
-
-    if (!deleteLabelResponse.ok)
-      throw new Error(
-        `Failed to delete label from PR ${deleteLabelResponse.status} ${deleteLabelResponse.statusText} ${await deleteLabelResponse.text()}`
+    if (hasWipLabel) {
+      const deleteLabelResponse = await this.githubHttpService.fetch(
+        this.routeService.GITHUB_ROUTES.DELETE_LABEL(repositoryOwner, repositoryName, pullRequestNumber, wipLabel),
+        { method: 'DELETE', authorization: req.headers.authorization }
       )
 
-    const addLabelResponse = await this.githubHttpService.fetch(
-      this.routeService.GITHUB_ROUTES.ADD_LABEL(repositoryOwner, repositoryName, pullRequestNumber),
+      if (!deleteLabelResponse.ok)
+        throw new Error(
+          `Failed to delete label from PR ${deleteLabelResponse.status} ${deleteLabelResponse.statusText} ${await deleteLabelResponse.text()}`
+        )
+    }
+
+    const pullRequestBody = clearReviewersFromBody('change_requested', pullRequest.body)
+
+    const editPullRequestResponse = await this.githubHttpService.fetch(
+      this.routeService.GITHUB_ROUTES.EDIT_PULL_REQUEST(repositoryOwner, repositoryName, pullRequestNumber),
       {
-        method: 'POST',
+        method: 'PATCH',
         authorization: req.headers.authorization,
-        body: [translationLabel, reviewLabel]
+        body: { body: pullRequestBody, state: 'open' }
       }
     )
 
-    if (!addLabelResponse.ok)
+    if (!editPullRequestResponse.ok)
       throw new Error(
-        `Failed to add label to PR ${addLabelResponse.status} ${addLabelResponse.statusText} ${await addLabelResponse.text()}`
+        `Failed to edit pull request ${editPullRequestResponse.status} ${editPullRequestResponse.statusText} ${await editPullRequestResponse.text()}`
       )
 
     return { success: true }
@@ -546,10 +641,6 @@ export class TranslationController {
     const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
     const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
     const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
-    const translationLabel = this.configService.getOrThrow('TRANSLATION_LABEL_NAME', { infer: true })
-    const approveLabel = this.configService.getOrThrow('TRANSLATION_APPROVED_LABEL_NAME', { infer: true })
-    const reviewLabel = this.configService.getOrThrow('TRANSLATION_REVIEW_LABEL_NAME', { infer: true })
-    const reviewedLabel = this.configService.getOrThrow('TRANSLATION_REVIEWED_LABEL_NAME', { infer: true })
 
     const response = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
@@ -559,6 +650,7 @@ export class TranslationController {
 
     if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
     const pullRequests = (await response.json()) as {
+      body: string
       number: number
       base: { ref: string }
       head: { ref: string }
@@ -574,43 +666,27 @@ export class TranslationController {
       throw new Error(`No pull request found for branch ${body.branch} with base ${mainBranch}`)
     }
 
-    const pullRequestNumber = pullRequest.number
+    const currentUserResponse = await this.githubHttpService.fetch(this.routeService.GITHUB_ROUTES.AUTHENTICATED_USER, {
+      authorization: req.headers.authorization
+    })
 
-    const whichLabelToRemove = pullRequest.labels.find(
-      (label) => label.name === reviewLabel || label.name === reviewedLabel
-    )?.name
-
-    if (!whichLabelToRemove) {
-      throw new Error(`No WIP or reviewed label found on pull request ${pullRequestNumber}`)
-    }
-
-    const deleteLabelResponse = await this.githubHttpService.fetch(
-      this.routeService.GITHUB_ROUTES.DELETE_LABEL(
-        repositoryOwner,
-        repositoryName,
-        pullRequestNumber,
-        whichLabelToRemove
-      ),
-      { method: 'DELETE', authorization: req.headers.authorization }
-    )
-
-    if (!deleteLabelResponse.ok)
+    if (!currentUserResponse.ok)
       throw new Error(
-        `Failed to delete label from PR ${deleteLabelResponse.status} ${deleteLabelResponse.statusText} ${await deleteLabelResponse.text()}`
+        `Failed to get authenticated user ${currentUserResponse.status} ${currentUserResponse.statusText} ${await currentUserResponse.text()}`
       )
 
-    const addLabelResponse = await this.githubHttpService.fetch(
-      this.routeService.GITHUB_ROUTES.ADD_LABEL(repositoryOwner, repositoryName, pullRequestNumber),
-      {
-        method: 'POST',
-        authorization: req.headers.authorization,
-        body: [translationLabel, approveLabel]
-      }
+    const currentUser = (await currentUserResponse.json()) as { login: string }
+    let pullRequestBody = addReviewerToBody('approvals', pullRequest.body, currentUser.login)
+    pullRequestBody = removeReviewerFromBody('change_requested', pullRequestBody, currentUser.login)
+
+    const editPullRequestResponse = await this.githubHttpService.fetch(
+      this.routeService.GITHUB_ROUTES.EDIT_PULL_REQUEST(repositoryOwner, repositoryName, pullRequest.number),
+      { method: 'PATCH', authorization: req.headers.authorization, body: { body: pullRequestBody, state: 'open' } }
     )
 
-    if (!addLabelResponse.ok)
+    if (!editPullRequestResponse.ok)
       throw new Error(
-        `Failed to add label to PR ${addLabelResponse.status} ${addLabelResponse.statusText} ${await addLabelResponse.text()}`
+        `Failed to edit pull request ${editPullRequestResponse.status} ${editPullRequestResponse.statusText} ${await editPullRequestResponse.text()}`
       )
 
     return { success: true }
@@ -621,9 +697,6 @@ export class TranslationController {
     const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
     const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
     const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
-    const translationLabel = this.configService.getOrThrow('TRANSLATION_LABEL_NAME', { infer: true })
-    const reviewedLabel = this.configService.getOrThrow('TRANSLATION_REVIEWED_LABEL_NAME', { infer: true })
-    const reviewLabel = this.configService.getOrThrow('TRANSLATION_REVIEW_LABEL_NAME', { infer: true })
 
     const response = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
@@ -632,41 +705,42 @@ export class TranslationController {
     )
 
     if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
-    const pullRequests = (await response.json()) as { number: number; base: { ref: string }; head: { ref: string } }[]
+    const pullRequests = (await response.json()) as {
+      number: number
+      base: { ref: string }
+      head: { ref: string }
+      body: string
+    }[]
 
     if (pullRequests.length === 0) {
       throw new Error(`No pull request found for branch ${body.branch}`)
     }
 
-    const pullRequestNumber = pullRequests.find(
-      (pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch
-    )?.number
-    if (!pullRequestNumber) {
+    const pullRequest = pullRequests.find((pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch)
+    if (!pullRequest) {
       throw new Error(`No pull request found for branch ${body.branch} with base ${mainBranch}`)
     }
 
-    const deleteLabelResponse = await this.githubHttpService.fetch(
-      this.routeService.GITHUB_ROUTES.DELETE_LABEL(repositoryOwner, repositoryName, pullRequestNumber, reviewLabel),
-      { method: 'DELETE', authorization: req.headers.authorization }
-    )
-
-    if (!deleteLabelResponse.ok)
+    const currentUserResponse = await this.githubHttpService.fetch(this.routeService.GITHUB_ROUTES.AUTHENTICATED_USER, {
+      authorization: req.headers.authorization
+    })
+    if (!currentUserResponse.ok)
       throw new Error(
-        `Failed to delete label from PR ${deleteLabelResponse.status} ${deleteLabelResponse.statusText} ${await deleteLabelResponse.text()}`
+        `Failed to get authenticated user ${currentUserResponse.status} ${currentUserResponse.statusText} ${await currentUserResponse.text()}`
       )
+    const currentUser = (await currentUserResponse.json()) as { login: string }
 
-    const addLabelResponse = await this.githubHttpService.fetch(
-      this.routeService.GITHUB_ROUTES.ADD_LABEL(repositoryOwner, repositoryName, pullRequestNumber),
-      {
-        method: 'POST',
-        authorization: req.headers.authorization,
-        body: [translationLabel, reviewedLabel]
-      }
+    let pullRequestBody = addReviewerToBody('change_requested', pullRequest.body, currentUser.login)
+    pullRequestBody = removeReviewerFromBody('approvals', pullRequestBody, currentUser.login)
+
+    const editPullRequestResponse = await this.githubHttpService.fetch(
+      this.routeService.GITHUB_ROUTES.EDIT_PULL_REQUEST(repositoryOwner, repositoryName, pullRequest.number),
+      { method: 'PATCH', authorization: req.headers.authorization, body: { body: pullRequestBody, state: 'open' } }
     )
 
-    if (!addLabelResponse.ok)
+    if (!editPullRequestResponse.ok)
       throw new Error(
-        `Failed to add label to PR ${addLabelResponse.status} ${addLabelResponse.statusText} ${await addLabelResponse.text()}`
+        `Failed to edit pull request ${editPullRequestResponse.status} ${editPullRequestResponse.statusText} ${await editPullRequestResponse.text()}`
       )
 
     return { success: true }
