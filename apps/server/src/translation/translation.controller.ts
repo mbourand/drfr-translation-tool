@@ -1036,8 +1036,8 @@ export class TranslationController {
     await this.cacheManager.set(CACHE_KEYS.PROGRESSION, {
       chapter3: {
         bible: 100,
-        texts: progressions.find((p) => p.name === 'Strings du chapitre 3')?.progression ?? 0,
-        textures: 60,
+        texts: 100,
+        textures: 65,
         audio: 30,
         test: 60
       },
