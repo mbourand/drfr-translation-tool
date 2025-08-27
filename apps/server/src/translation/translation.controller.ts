@@ -1037,9 +1037,9 @@ export class TranslationController {
       chapter3: {
         bible: 100,
         texts: 100,
-        textures: 85,
-        audio: 90,
-        test: 95
+        textures: 95,
+        audio: 100,
+        test: 99
       },
       chapter4: {
         bible: 80,
