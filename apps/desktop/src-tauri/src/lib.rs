@@ -92,6 +92,36 @@ async fn run_game_executable(game_folder_path: &str) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn pull_changes_from_git(git_folder: &str) -> Result<(), String> {
+    // Switch to master if not on this branch, then git pull, report error if pull or switch failed
+    let output = Command::new("git")
+        .args(["checkout", "master"])
+        .current_dir(git_folder)
+        .output()
+        .map_err(|e| format!("Failed to execute git checkout: {}", e))?;
+
+	println!("Git checkout output: {}", String::from_utf8_lossy(&output.stdout));
+
+    if !output.status.success() {
+        return Err(format!("git checkout failed: {}", String::from_utf8_lossy(&output.stderr)));
+    }
+
+    let output = Command::new("git")
+        .args(["pull", "origin", "master"])
+        .current_dir(git_folder)
+        .output()
+        .map_err(|e| format!("Failed to execute git pull: {}", e))?;
+
+	println!("Git pull output: {}", String::from_utf8_lossy(&output.stdout));
+
+    if !output.status.success() {
+        return Err(format!("git pull failed: {}", String::from_utf8_lossy(&output.stderr)));
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 fn unzip_file(path: String, target_dir: String) -> Result<(), String> {
     let archive = std::fs::read(&path)
         .map_err(|e| format!("Error reading file {}: {}", path, e.to_string()))?;
@@ -125,6 +155,7 @@ pub fn run() {
             import_strings,
             unzip_file,
             is_dev,
+            pull_changes_from_git,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

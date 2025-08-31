@@ -4,9 +4,10 @@ import { PatchGameTranslationFile } from '../../../../modules/game/launch'
 
 type LaunchGameButtonProps = {
   files: PatchGameTranslationFile[]
+  changes: Map<string, string>
 }
 
-export const LaunchGameButton = ({ files }: LaunchGameButtonProps) => {
+export const LaunchGameButton = ({ files, changes }: LaunchGameButtonProps) => {
   const [isSaveModalVisible, setIsSaveModalVisible] = useState(false)
 
   return (
@@ -14,7 +15,12 @@ export const LaunchGameButton = ({ files }: LaunchGameButtonProps) => {
       <button className="btn btn-soft btn-primary" onClick={() => setIsSaveModalVisible(true)}>
         Lancer le jeu
       </button>
-      <LaunchGameModal isVisible={isSaveModalVisible} onClose={() => setIsSaveModalVisible(false)} files={files} />
+      <LaunchGameModal
+        isVisible={isSaveModalVisible}
+        onClose={() => setIsSaveModalVisible(false)}
+        files={files}
+        changes={changes}
+      />
     </>
   )
 }

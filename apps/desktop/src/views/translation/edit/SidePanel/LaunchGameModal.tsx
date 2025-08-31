@@ -3,19 +3,22 @@ import { patchAndLaunchGame, PatchGameTranslationFile } from '../../../../module
 import { open } from '@tauri-apps/plugin-dialog'
 import { store, STORE_KEYS } from '../../../../store/store'
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { fetchData } from '../../../../modules/fetching/fetcher'
 import { STATIC_ROUTES } from '../../../../routes/static/routes'
 import { ENV } from '../../../../Env'
 import { repairGameFiles } from '../../../../modules/game/repair'
+import { invoke } from '@tauri-apps/api/core'
+import { RUST_COMMANDS } from '../../../../modules/commands/commands'
 
 type LaunchGameModalProps = {
   isVisible: boolean
   onClose: () => void
   files: PatchGameTranslationFile[]
+  changes: Map<string, string>
 }
 
-export const LaunchGameModal = ({ onClose, isVisible, files }: LaunchGameModalProps) => {
+export const LaunchGameModal = ({ onClose, isVisible, files, changes }: LaunchGameModalProps) => {
   const { data: gameFolder, refetch: refetchGameFolder } = useQuery({
     queryKey: [STORE_KEYS.GAME_FOLDER_PATH],
     queryFn: async () => {
@@ -77,12 +80,14 @@ export const LaunchGameModal = ({ onClose, isVisible, files }: LaunchGameModalPr
   })
 
   const [isLoading, setIsLoading] = useState(false)
+  const onlyPatchChangedFilesInputRef = useRef<HTMLInputElement>(null)
 
   return (
     <Modal
       onClose={onClose}
       isVisible={isVisible}
       label="Lancer le jeu"
+      className="!max-w-[700px]"
       actions={
         <>
           <button className="float-right btn btn-ghost" onClick={onClose}>
@@ -102,12 +107,35 @@ export const LaunchGameModal = ({ onClose, isVisible, files }: LaunchGameModalPr
             Réparer
           </button>
           <button
+            className="float-right btn btn-soft"
+            onClick={async () => {
+              if (!gitFolder) return
+
+              try {
+                await invoke(RUST_COMMANDS.PULL_CHANGES_FROM_GIT, { gitFolder })
+                alert('La mise à jour des fichiers a été effectuée avec succès.')
+              } catch (error) {
+                console.error('Error pulling changes from git:')
+                console.error(error)
+                alert(`La mise à jour a échoué. Erreur: ${error}. Vérifiez les logs pour plus d'informations.`)
+              }
+            }}
+          >
+            Mettre à jour les fichiers git
+          </button>
+          <button
             disabled={!gameFolder || !utmtCliFolder}
             className="float-right btn btn-primary"
             onClick={async () => {
               if (!gameFolder || !utmtCliFolder || !gitFolder || !savesFolder || !selectedSaveFiles) return
               const selectedSaveFilesData = deltaruneSavesIndex?.find((save) => save.name === selectedSaveFiles)
               if (!selectedSaveFilesData) return
+
+              const changesArray = Array.from(changes.entries())
+
+              const filesToPatch = onlyPatchChangedFilesInputRef.current?.checked
+                ? files.filter((file) => changesArray.some(([key]) => key.startsWith(file.pathInGitFolder)))
+                : files
 
               setIsLoading(true)
               await patchAndLaunchGame({
@@ -119,7 +147,7 @@ export const LaunchGameModal = ({ onClose, isVisible, files }: LaunchGameModalPr
                   name: file,
                   url: ENV.DRFR_WEBSITE_URL + '/translation-tool/saves/' + selectedSaveFilesData.path + '/' + file
                 })),
-                files
+                files: filesToPatch
               })
               setIsLoading(false)
               onClose()
@@ -238,6 +266,18 @@ export const LaunchGameModal = ({ onClose, isVisible, files }: LaunchGameModalPr
             ))}
           </select>
         </div>
+        {changes.size > 0 && (
+          <label className="flex flex-row gap-2" htmlFor="only-patch-changes">
+            <input
+              ref={onlyPatchChangedFilesInputRef}
+              id="only-patch-changes"
+              type="checkbox"
+              defaultChecked
+              className="checkbox !shadow-none"
+            />
+            Ne patcher que les fichiers modifiés
+          </label>
+        )}
       </div>
     </Modal>
   )

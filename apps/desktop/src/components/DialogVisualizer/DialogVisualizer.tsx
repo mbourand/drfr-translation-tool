@@ -119,14 +119,15 @@ export const DialogVisualizer = ({ getDialog }: DialogVisualizerProps) => {
     }
   }, [])
 
-  const isHeadDialog = /^\\[A-Z][A-Za-z0-9]/.test(internalDialog)
+  const isHeadDialog = /^\\E[A-Za-z0-9]/.test(internalDialog)
 
   const sanitizedDialog = internalDialog
     .replace(/\[RETOUR A LA LIGNE\]/g, '&')
     .replace(/\r/g, '')
     .replace(/\^\d/g, '')
     .replace(/\\c[A-Z0-9]/g, '')
-    .replace(/^\\[A-Z][a-zA-Z0-9]/g, '')
+    .replace(/^\\[A-Za-z][a-zA-Z0-9]/g, '')
+    .replace(/ %%$/g, '')
     .replace(/\/%?$/g, '')
 
   const lines = useMemo(() => {
