@@ -945,7 +945,7 @@ export class TranslationController {
 
     const files = await Promise.all(
       filePaths
-        .filter((f) => f.name === 'Strings du chapitre 3' || f.name === 'Strings du chapitre 4')
+        .filter((f) => f.name === 'Strings du chapitre 4')
         .map(async ({ original, translated, name }) => {
           const originalFileResponse = await this.githubHttpService.fetch(
             this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, original) + `?ref=${branch}`,
@@ -1045,7 +1045,7 @@ export class TranslationController {
         bible: 90,
         texts: progressions.find((p) => p.name === 'Strings du chapitre 4')?.progression ?? 0,
         textures: 0,
-        audio: 0,
+        audio: 15,
         test: 0
       }
     })
