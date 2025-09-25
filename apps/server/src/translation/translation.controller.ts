@@ -238,7 +238,7 @@ export class TranslationController {
 
     const response = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-        `?base=${mainBranch}&state=all&sort=updated&direction=desc&per_page=100`,
+        `?base=${mainBranch}&state=all&sort=created&direction=desc&per_page=100`,
       { authorization: req.headers.authorization }
     )
 
