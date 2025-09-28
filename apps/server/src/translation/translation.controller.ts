@@ -793,7 +793,7 @@ export class TranslationController {
       return cachedComments
     }
 
-    let comments: unknown[] = []
+    let comments: { original_line?: number }[] = []
     const maxIter = 5
 
     for (let i = 0; i < maxIter; i++) {
@@ -806,7 +806,9 @@ export class TranslationController {
 
       if (!commentsResponse.ok) throw new Error(`Failed to fetch comments ${response.status} ${response.statusText}`)
       comments = comments.concat(
-        ((await commentsResponse.json()) as { line?: number }[]).filter((comment) => comment.line != null)
+        ((await commentsResponse.json()) as { original_line?: number }[]).filter(
+          (comment) => comment.original_line != null
+        )
       )
 
       if (!commentsResponse.headers.get('Link')) break
@@ -815,7 +817,10 @@ export class TranslationController {
     await this.cacheManager.set(CACHE_KEYS.COMMENTS(pullRequestNumber), comments, 1000 * 60 * 60)
     Logger.log(`Fetched ${comments.length} comments for pull request ${pullRequestNumber}`)
 
-    return comments
+    return comments.map((comment) => ({
+      ...comment,
+      line: (comment as { original_line?: number }).original_line
+    }))
   }
 
   @Post('/comment')
