@@ -244,7 +244,7 @@ export class TranslationController {
 
     const responseClosed = await this.githubHttpService.fetch(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-        `?base=${mainBranch}&state=closed&sort=created&direction=desc&per_page=20`,
+        `?base=${mainBranch}&state=closed&sort=created&direction=desc&per_page=50`,
       { authorization: req.headers.authorization }
     )
 
