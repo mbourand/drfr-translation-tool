@@ -814,13 +814,15 @@ export class TranslationController {
       if (!commentsResponse.headers.get('Link')) break
     }
 
-    await this.cacheManager.set(CACHE_KEYS.COMMENTS(pullRequestNumber), comments, 1000 * 60 * 60)
-    Logger.log(`Fetched ${comments.length} comments for pull request ${pullRequestNumber}`)
-
-    return comments.map((comment) => ({
+    const mappedComments = comments.map((comment) => ({
       ...comment,
       line: (comment as { original_line?: number }).original_line
     }))
+
+    await this.cacheManager.set(CACHE_KEYS.COMMENTS(pullRequestNumber), mappedComments, 1000 * 60 * 60)
+    Logger.log(`Fetched ${comments.length} comments for pull request ${pullRequestNumber}`)
+
+    return mappedComments
   }
 
   @Post('/comment')
