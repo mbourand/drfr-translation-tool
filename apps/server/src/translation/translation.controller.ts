@@ -1064,7 +1064,7 @@ export class TranslationController {
       chapter4: {
         bible: 90,
         texts: progressions.find((p) => p.name === 'Strings du chapitre 4')?.progression ?? 0,
-        textures: 0,
+        textures: 100,
         audio: 15,
         test: 0
       }
