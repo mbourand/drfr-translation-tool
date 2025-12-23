@@ -1062,7 +1062,7 @@ export class TranslationController {
         test: 100
       },
       chapter4: {
-        bible: 90,
+        bible: 100,
         texts: progressions.find((p) => p.name === 'Strings du chapitre 4')?.progression ?? 0,
         textures: 100,
         audio: 15,
