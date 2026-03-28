@@ -14,6 +14,7 @@ import { useTranslationFiles } from '../../../hooks/useTranslationFiles'
 import { isRowVisible } from '../isCellVisible'
 import { DialogVisualizer } from '../../../components/DialogVisualizer/DialogVisualizer'
 import { UnsavedChangesModal } from '../review/UnsavedChangesModal'
+import { ENV } from '../../../Env'
 
 export const EditTranslationView = () => {
   const branch = useParams().branch
@@ -22,6 +23,7 @@ export const EditTranslationView = () => {
   const [selectedFile, setSelectedFile] = useState<FileType | null>(null)
 
   const [changedLines, setChangedLines] = useState(new Map<string, string>())
+  const committedValuesRef = useRef(new Map<string, string>())
 
   const [gridApi, setGridApi] = useState<GridApi<LineType> | null>(null)
 
@@ -35,6 +37,14 @@ export const EditTranslationView = () => {
   const {
     translationFiles: { data: files, isPending, isError, error }
   } = useTranslationFiles(branch)
+
+  const {
+    translationFiles: { data: masterFiles }
+  } = useTranslationFiles(ENV.GITHUB_BASE_BRANCH)
+
+  const {
+    translationFiles: { data: branchCreationFiles }
+  } = useTranslationFiles(branch, { atBranchCreation: true })
 
   const filesByCategory = useMemo(
     () =>
@@ -55,6 +65,73 @@ export const EditTranslationView = () => {
     () => selectedFileContents?.lines.filter((line) => !isTechnicalString(line.original)),
     [selectedFileContents]
   )
+
+  const branchCreationIndex = useMemo(() => {
+    if (!selectedFile || !branchCreationFiles) return undefined
+    const file = branchCreationFiles.find((f) => f.translatedPath === selectedFile.translatedPath)
+    if (!file) return undefined
+    const map = new Map<number, string>()
+    for (const line of file.lines) {
+      map.set(line.lineNumber, line.translated)
+    }
+    return map
+  }, [branchCreationFiles, selectedFile])
+
+  const masterIndex = useMemo(() => {
+    if (!selectedFile || !masterFiles) return undefined
+    const file = masterFiles.find((f) => f.translatedPath === selectedFile.translatedPath)
+    if (!file) return undefined
+    const map = new Map<number, string>()
+    for (const line of file.lines) {
+      map.set(line.lineNumber, line.translated)
+    }
+    return map
+  }, [masterFiles, selectedFile])
+
+  const updateGridCell = (lineNumber: number, value: string) => {
+    if (!gridApi) return
+    const rowIndex = filteredLines?.findIndex((l) => l.lineNumber === lineNumber) ?? -1
+    if (rowIndex === -1) return
+    const rowNode = gridApi.getDisplayedRowAtIndex(rowIndex)
+    if (!rowNode?.data) return
+    rowNode.data.translated = value
+    gridApi.refreshCells({ rowNodes: [rowNode], columns: ['translated'], force: true })
+  }
+
+  const handleResetToCommit = (lineNumber: number) => {
+    if (!selectedFile) return
+    const key = makeLineKey(selectedFile.translatedPath, lineNumber)
+    const committedValue = committedValuesRef.current.get(key)
+    if (committedValue === undefined) return
+
+    setChangedLines((prev) => {
+      prev.delete(key)
+      return new Map(prev)
+    })
+
+    updateGridCell(lineNumber, committedValue)
+  }
+
+  const handleResetToMaster = (lineNumber: number) => {
+    if (!selectedFile) return
+    const masterValue = masterIndex?.get(lineNumber)
+    if (masterValue === undefined) return
+
+    const key = makeLineKey(selectedFile.translatedPath, lineNumber)
+    const committedValue = committedValuesRef.current.get(key)
+
+    setChangedLines((prev) => {
+      if (committedValue !== undefined && committedValue === masterValue) {
+        prev.delete(key)
+      } else {
+        prev.set(key, masterValue)
+      }
+      return new Map(prev)
+    })
+    setHasUnsavedChanges(true)
+
+    updateGridCell(lineNumber, masterValue)
+  }
 
   const navigate = useNavigate()
 
@@ -102,10 +179,13 @@ export const EditTranslationView = () => {
         {selectedFileContents && selectedFile && (
           <div className="w-full h-full pb-4 flex flex-row justify-center">
             <TranslationGrid
-              onLineEdited={({ data, newValue }) => {
+              onLineEdited={({ data, newValue, oldValue }) => {
                 const key = makeLineKey(selectedFile.translatedPath, data.lineNumber)
+                if (!committedValuesRef.current.has(key)) {
+                  committedValuesRef.current.set(key, oldValue)
+                }
                 setChangedLines((prev) => {
-                  if (data.original === newValue) prev.delete(key)
+                  if (committedValuesRef.current.get(key) === newValue) prev.delete(key)
                   else prev.set(key, newValue)
                   return new Map(prev)
                 })
@@ -124,6 +204,10 @@ export const EditTranslationView = () => {
               onReady={(e) => setGridApi(e.api)}
               translatedStringSearchResult={stringSearchResult}
               matchLanguage={matchLanguage}
+              onResetToCommit={handleResetToCommit}
+              onResetToMaster={handleResetToMaster}
+              getMasterValue={(lineNumber) => masterIndex?.get(lineNumber)}
+              getValueAtBranchCreation={(lineNumber) => branchCreationIndex?.get(lineNumber)}
             />
           </div>
         )}
