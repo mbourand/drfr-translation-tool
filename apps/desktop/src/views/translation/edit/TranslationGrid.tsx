@@ -128,7 +128,7 @@ export const TranslationGrid = ({
         rowClassRules={{
           'ag-cell-changed': ({ data }) => {
             if (!data) return false
-            if (changedLineNumbers.includes(data.lineNumber)) return false
+            if (changedLineNumbers.includes(data.lineNumber)) return true
             const valueAtCreation = getValueAtBranchCreation?.(data.lineNumber)
             return valueAtCreation !== undefined && valueAtCreation !== data.translated
           }
