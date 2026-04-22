@@ -1066,7 +1066,7 @@ export class TranslationController {
         texts: 100,
         textures: 100,
         audio: 65,
-        test: 85
+        test: 97
       }
     })
   }
