@@ -11,6 +11,7 @@ import { Line, MatchLanguages } from '../../../types/translation'
 import { StringSearchResult } from '../../../components/StringSearch/types'
 import { HighlightedText } from '../../../components/HighlightedText'
 import { useCallback, useState } from 'react'
+import { twMerge } from 'tailwind-merge'
 import { ContextMenu, ContextMenuAction } from './ContextMenu'
 
 type ContextMenuState = {
@@ -31,6 +32,8 @@ type TranslationGridProps = {
   onResetToMaster?: (lineNumber: number) => void
   getMasterValue?: (lineNumber: number) => string | undefined
   getValueAtBranchCreation?: (lineNumber: number) => string | undefined
+  editable?: boolean
+  className?: string
 }
 
 export const TranslationGrid = ({
@@ -44,7 +47,9 @@ export const TranslationGrid = ({
   onResetToCommit,
   onResetToMaster,
   getMasterValue,
-  getValueAtBranchCreation
+  getValueAtBranchCreation,
+  editable = true,
+  className
 }: TranslationGridProps) => {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null)
 
@@ -92,7 +97,7 @@ export const TranslationGrid = ({
         theme={myTheme}
         preventDefaultOnContextMenu={true}
         headerHeight={36}
-        className="w-full max-w-[1700px] relative h-[calc(100svh-200px)]"
+        className={twMerge('w-full max-w-[1700px] relative h-[calc(100svh-200px)]', className)}
         rowData={linesToShow}
         rowClassRules={{
           'ag-cell-changed': ({ data }) => {
@@ -122,11 +127,11 @@ export const TranslationGrid = ({
             autoHeight: true,
             wrapText: true,
             flex: 1,
-            editable: true,
+            editable,
             sortable: false,
-            cellEditor: 'agTextCellEditor',
+            cellEditor: editable ? 'agTextCellEditor' : undefined,
             cellClass: 'leading-6!',
-            onCellValueChanged: onLineEdited,
+            onCellValueChanged: editable ? onLineEdited : undefined,
             cellRenderer: matchLanguage === 'fr' ? customCellRenderer : undefined
           }
         ]}

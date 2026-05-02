@@ -135,6 +135,24 @@ export const TRANSLATION_API_URLS = {
         responseSchema: z.object({
           success: z.boolean()
         })
-      } as const)
+      } as const),
+    UPDATE_IMPACTS: {
+      url: `${ENV.TRANSLATION_API_BASE_URL}/translation/impacts`,
+      method: 'PATCH',
+      bodySchema: z.object({
+        branch: z.string(),
+        auto: z.array(z.number()).optional(),
+        manual_include: z.array(z.number()).optional(),
+        manual_exclude: z.array(z.number()).optional()
+      }),
+      responseSchema: z.object({
+        success: z.boolean(),
+        impacts: z.object({
+          auto: z.array(z.number()),
+          manual_include: z.array(z.number()),
+          manual_exclude: z.array(z.number())
+        })
+      })
+    }
   }
 } as const

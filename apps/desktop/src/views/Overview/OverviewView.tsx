@@ -11,6 +11,8 @@ import { TRANSLATION_APP_PAGES } from '../../routes/pages/routes'
 import { useNavigate } from 'react-router'
 import { z } from 'zod'
 import { readMarker } from '../../modules/prMarkers/prMarkers'
+import { useBetaReports } from '../../hooks/useBetaReports'
+import { getReportSeverity } from '../beta-reports/reportSelectors'
 
 const TRANSLATION_LABEL = 'Traduction'
 const WIP_LABEL = 'En cours'
@@ -131,14 +133,18 @@ export const OverviewView = () => {
 
   return (
     <>
-      <main className="h-screen mx-auto max-w-[1700px] w-full flex flex-col gap-8 py-8 px-4">
-        <h1 className="text-center text-4xl font-bold">Vue d'ensemble</h1>
+      <main className="h-screen mx-auto max-w-[1700px] w-full flex flex-col gap-6 py-8 px-4">
+        <div className="flex flex-row items-center gap-3">
+          <h1 className="text-center text-4xl font-bold flex-1">Vue d'ensemble</h1>
+          <BetaReportsCard />
+          <LogoutButton />
+        </div>
         <section className="flex flex-row w-full gap-2 h-full relative">
           {translationLists.map((list) => (
             <TranslationList
               key={list.title}
               className="w-full"
-              flexClassName="h-[calc(100svh-200px)]"
+              flexClassName="h-[calc(100svh-220px)]"
               title={list.title}
               translations={list.translations}
               extraElements={list.extraElements}
@@ -151,5 +157,51 @@ export const OverviewView = () => {
         onClose={() => setIsCreateTranslationModalVisible(false)}
       />
     </>
+  )
+}
+
+const LogoutButton = () => {
+  const navigate = useNavigate()
+  return (
+    <button
+      className="btn btn-ghost"
+      onClick={async () => {
+        await store.delete(STORE_KEYS.USER_INFOS)
+        await navigate(TRANSLATION_APP_PAGES.HOME)
+      }}
+    >
+      Se déconnecter
+    </button>
+  )
+}
+
+const BetaReportsCard = () => {
+  const navigate = useNavigate()
+  const { data: reports } = useBetaReports('open')
+
+  const counts = useMemo(() => {
+    const result = { total: reports?.length ?? 0, blocker: 0, major: 0, minor: 0 }
+    for (const report of reports ?? []) {
+      const severity = getReportSeverity(report)
+      if (severity === 'blocker') result.blocker++
+      else if (severity === 'major') result.major++
+      else if (severity === 'minor') result.minor++
+    }
+    return result
+  }, [reports])
+
+  return (
+    <button
+      className="btn btn-soft h-auto py-2 flex flex-col items-end gap-1"
+      onClick={() => navigate(TRANSLATION_APP_PAGES.BETA_REPORTS('open'))}
+    >
+      <span className="text-sm font-semibold">Signalements ouverts</span>
+      <div className="flex flex-row gap-2 text-xs">
+        <span className="badge badge-error badge-sm">{counts.blocker}</span>
+        <span className="badge badge-warning badge-sm">{counts.major}</span>
+        <span className="badge badge-success badge-sm">{counts.minor}</span>
+        <span className="opacity-60">total {counts.total}</span>
+      </div>
+    </button>
   )
 }
