@@ -1,17 +1,16 @@
 import { useState } from 'react'
 import { Modal } from '../../../../components/Modal'
 import { TRANSLATION_API_URLS } from '../../../../routes/translation/routes'
-import { store, STORE_KEYS, StoreUserInfos } from '../../../../store/store'
 import { useMutation } from '@tanstack/react-query'
-import { fetchData } from '../../../../modules/fetching/fetcher'
+import { authedFetch } from '../../../../modules/fetching/fetcher'
 import { useNavigate } from 'react-router'
 import { TRANSLATION_APP_PAGES } from '../../../../routes/pages/routes'
-import { FileType } from './SidePanel'
+import { TranslationFile } from '../../../../types/translation'
 import { useSaveChanges } from '../../../../hooks/useSaveChanges'
 
 type SubmitToReviewButtonProps = {
   branch: string
-  files: FileType[]
+  files: TranslationFile[]
   changes: Map<string, string>
 }
 
@@ -22,12 +21,8 @@ export const SubmitToReviewButton = ({ branch, files, changes }: SubmitToReviewB
   const submitQuery = useMutation({
     mutationKey: ['submit-to-review', branch],
     mutationFn: async (branch: string) => {
-      const userInfos = await store.get<StoreUserInfos>(STORE_KEYS.USER_INFOS)
-      if (!userInfos) throw new Error('No token found')
-
-      return await fetchData({
+      return await authedFetch({
         route: TRANSLATION_API_URLS.TRANSLATIONS.SUBMIT_TO_REVIEW,
-        headers: { Authorization: `Bearer ${userInfos.accessToken}` },
         body: { branch }
       })
     }

@@ -2,10 +2,10 @@ import { useEffect } from 'react'
 import { StringSearch } from '../../../components/StringSearch/StringSearch'
 import { StringSearchResult } from '../../../components/StringSearch/types'
 import { useStringSearch } from '../../../components/StringSearch/useStringSearch'
-import { LineType, MatchLanguages } from './types'
+import { Line, MatchLanguages } from '../../../types/translation'
 
 type TranslationStringSearchProps = {
-  filteredLines: LineType[]
+  filteredLines: Line[]
   matchLanguage: MatchLanguages
   onMatchChanged: (result: StringSearchResult | null) => void
   onMatchLanguageChanged: (language: MatchLanguages) => void

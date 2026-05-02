@@ -3,9 +3,8 @@ import { Modal } from '../../components/Modal'
 import { useMutation } from '@tanstack/react-query'
 import { TRANSLATION_APP_PAGES } from '../../routes/pages/routes'
 import { useNavigate } from 'react-router'
-import { store, STORE_KEYS, StoreUserInfos } from '../../store/store'
 import { TRANSLATION_API_URLS } from '../../routes/translation/routes'
-import { fetchData } from '../../modules/fetching/fetcher'
+import { authedFetch } from '../../modules/fetching/fetcher'
 
 type CreateTranslationModalProps = {
   isVisible: boolean
@@ -13,12 +12,8 @@ type CreateTranslationModalProps = {
 }
 
 const createTranslation = async (name: string) => {
-  const userInfos = await store.get<StoreUserInfos>(STORE_KEYS.USER_INFOS)
-  if (!userInfos) throw new Error('No token found')
-
-  return await fetchData({
+  return await authedFetch({
     route: TRANSLATION_API_URLS.TRANSLATIONS.CREATE,
-    headers: { Authorization: `Bearer ${userInfos.accessToken}` },
     body: { name }
   })
 }

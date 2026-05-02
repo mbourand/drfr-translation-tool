@@ -7,9 +7,9 @@ import {
   NewValueParams
 } from 'ag-grid-community'
 import { myTheme } from './grid-theme'
-import { LineType, MatchLanguages } from './types'
+import { Line, MatchLanguages } from '../../../types/translation'
 import { StringSearchResult } from '../../../components/StringSearch/types'
-import { getParts } from '../../../string-search/get-parts'
+import { HighlightedText } from '../../../components/HighlightedText'
 import { useCallback, useState } from 'react'
 import { ContextMenu, ContextMenuAction } from './ContextMenu'
 
@@ -20,11 +20,11 @@ type ContextMenuState = {
 } | null
 
 type TranslationGridProps = {
-  linesToShow: LineType[]
+  linesToShow: Line[]
   changedLineNumbers: number[]
-  onLineEdited: (event: NewValueParams<LineType, any>) => void
-  onReady?: (event: GridReadyEvent<LineType>) => void
-  onCellFocused?: (event: CellFocusedEvent<LineType, any>) => void
+  onLineEdited: (event: NewValueParams<Line, any>) => void
+  onReady?: (event: GridReadyEvent<Line>) => void
+  onCellFocused?: (event: CellFocusedEvent<Line, any>) => void
   translatedStringSearchResult: StringSearchResult | null
   matchLanguage: MatchLanguages
   onResetToCommit?: (lineNumber: number) => void
@@ -49,7 +49,7 @@ export const TranslationGrid = ({
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null)
 
   const handleCellContextMenu = useCallback(
-    (event: CellContextMenuEvent<LineType>) => {
+    (event: CellContextMenuEvent<Line>) => {
       if (!event.data || event.column?.getColId() !== 'translated') return
 
       const mouseEvent = event.event as MouseEvent
@@ -79,40 +79,9 @@ export const TranslationGrid = ({
   )
 
   const customCellRenderer = (params: ICellRendererParams) => {
-    const cellText: string = params.value
-
-    if (params.node.rowIndex == null || !translatedStringSearchResult) return cellText
-
-    const rowIndex = params.node.rowIndex
-
-    const rowMatches = translatedStringSearchResult.matches.get(rowIndex)
-
-    if (!rowMatches) return cellText
-
-    const pattern = translatedStringSearchResult.pattern
-    const parts = getParts(rowMatches, pattern.length, cellText.length)
-
-    const getMatchColor = (rowIndex: number, charIndex: number) => {
-      return translatedStringSearchResult.selectedMatch?.rowIndex == rowIndex &&
-        translatedStringSearchResult.selectedMatch?.charIndex == charIndex
-        ? 'orange'
-        : 'yellow'
-    }
-
+    if (params.node.rowIndex == null) return params.value
     return (
-      <span>
-        {parts.map(({ start, end, isMatch }, i) => {
-          const part = cellText.slice(start, end)
-          if (isMatch) {
-            return (
-              <span key={i} style={{ backgroundColor: getMatchColor(rowIndex, start), color: 'black' }}>
-                {part}
-              </span>
-            )
-          }
-          return <span key={i}>{part}</span>
-        })}
-      </span>
+      <HighlightedText text={params.value} rowIndex={params.node.rowIndex} searchResult={translatedStringSearchResult} />
     )
   }
 

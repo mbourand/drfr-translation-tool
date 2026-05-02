@@ -1,5 +1,5 @@
 import { Modal } from '../../../../components/Modal'
-import { FileType } from './SidePanel'
+import { TranslationFile } from '../../../../types/translation'
 import { useSaveChanges } from '../../../../hooks/useSaveChanges'
 import { useEffect } from 'react'
 
@@ -7,7 +7,7 @@ type SaveChangesModalProps = {
   isVisible: boolean
   onClose: () => void
   branch: string
-  files: FileType[]
+  files: TranslationFile[]
   changes: Map<string, string>
   onSaveSuccess?: () => void
 }

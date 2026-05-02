@@ -1,16 +1,17 @@
 import { NavLink, useNavigate, useParams, useSearchParams } from 'react-router'
 import { TRANSLATION_APP_PAGES } from '../../../routes/pages/routes'
 import { useMemo, useRef, useState } from 'react'
-import { SidePanel, FileType } from './SidePanel/SidePanel'
+import { TranslationSidePanel } from '../SidePanel'
+import { LaunchGameButton } from './SidePanel/LaunchGameButton'
+import { SubmitToReviewButton } from './SidePanel/SubmitToReviewButton'
+import { SaveChangesButton } from './SidePanel/SaveChangesButton'
 import { TranslationGrid } from './TranslationGrid'
 import { ArrowLeftIcon } from '../../../components/icons/ArrowLeftIcon'
-import { GridApi } from 'ag-grid-community'
-import { LineType, MatchLanguages } from './types'
-import { StringSearchResult } from '../../../components/StringSearch/types'
+import { Line } from '../../../types/translation'
 import { TranslationStringSearch } from './TranslationStringSearch'
-import { makeLineKey } from './changes'
-import { isTechnicalString } from '../../../modules/game/strings'
+import { makeLineKey, parseLineKey } from './changes'
 import { useTranslationFiles } from '../../../hooks/useTranslationFiles'
+import { useTranslationView } from '../../../hooks/useTranslationView'
 import { isRowVisible } from '../isCellVisible'
 import { DialogVisualizer } from '../../../components/DialogVisualizer/DialogVisualizer'
 import { UnsavedChangesModal } from '../review/UnsavedChangesModal'
@@ -20,17 +21,9 @@ export const EditTranslationView = () => {
   const branch = useParams().branch
   const [searchParams] = useSearchParams()
   const prName = searchParams.get('name') ?? ''
-  const [selectedFile, setSelectedFile] = useState<FileType | null>(null)
 
   const [changedLines, setChangedLines] = useState(new Map<string, string>())
   const committedValuesRef = useRef(new Map<string, string>())
-
-  const [gridApi, setGridApi] = useState<GridApi<LineType> | null>(null)
-
-  const [stringSearchResult, setStringSearchResult] = useState<StringSearchResult | null>(null)
-  const [matchLanguage, setMatchLanguage] = useState<MatchLanguages>('fr')
-
-  const focusedCellRef = useRef<string | null>(null)
 
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
@@ -46,25 +39,20 @@ export const EditTranslationView = () => {
     translationFiles: { data: branchCreationFiles }
   } = useTranslationFiles(branch, { atBranchCreation: true })
 
-  const filesByCategory = useMemo(
-    () =>
-      files?.reduce((acc, file) => {
-        if (!acc[file.category]) acc[file.category] = []
-        acc[file.category].push(file)
-        return acc
-      }, {} as Record<string, FileType[]>) ?? {},
-    [files]
-  )
-
-  const selectedFileContents = useMemo(
-    () => files?.find((file) => file.translatedPath === selectedFile?.translatedPath),
-    [files, selectedFile]
-  )
-
-  const filteredLines = useMemo(
-    () => selectedFileContents?.lines.filter((line) => !isTechnicalString(line.original)),
-    [selectedFileContents]
-  )
+  const {
+    selectedFile,
+    setSelectedFile,
+    gridApi,
+    setGridApi,
+    stringSearchResult,
+    setStringSearchResult,
+    matchLanguage,
+    setMatchLanguage,
+    focusedCellRef,
+    filesByCategory,
+    selectedFileContents,
+    filteredLines
+  } = useTranslationView(files)
 
   const branchCreationIndex = useMemo(() => {
     if (!selectedFile || !branchCreationFiles) return undefined
@@ -142,14 +130,32 @@ export const EditTranslationView = () => {
 
   return (
     <div className="flex flex-row">
-      <SidePanel
+      <TranslationSidePanel
         title="Fichiers de traduction"
         categories={filesByCategory}
-        onSelected={(selected) => setSelectedFile(selected)}
+        onSelected={setSelectedFile}
         selected={selectedFile}
-        branch={branch}
-        changes={changedLines}
-        onSaveSuccess={() => setHasUnsavedChanges(false)}
+        footer={
+          <>
+            <LaunchGameButton
+              files={(files ?? []).map((file) => ({
+                pathsInGameFolder: file.pathsInGameFolder,
+                content: file.lines
+                  .map((line) => changedLines.get(makeLineKey(file.translatedPath, line.lineNumber)) ?? line.translated)
+                  .join('\n'),
+                pathInGitFolder: file.translatedPath
+              }))}
+              changes={changedLines}
+            />
+            <SubmitToReviewButton branch={branch} files={files ?? []} changes={changedLines} />
+            <SaveChangesButton
+              branch={branch}
+              changes={changedLines}
+              files={files ?? []}
+              onSaveSuccess={() => setHasUnsavedChanges(false)}
+            />
+          </>
+        }
       />
       <div className="flex flex-col items-center w-full px-4">
         <div className="flex flex-row w-full items-center mb-4 pt-2">
@@ -193,14 +199,15 @@ export const EditTranslationView = () => {
               }}
               onCellFocused={(e) => {
                 if (!filteredLines || e.rowIndex == null || typeof e.column !== 'object') return
-                const value = filteredLines[e.rowIndex]?.[(e.column?.getColId() as keyof LineType) ?? 'translated']
+                const value = filteredLines[e.rowIndex]?.[(e.column?.getColId() as keyof Line) ?? 'translated']
                 if (typeof value !== 'string') return
                 focusedCellRef.current = value
               }}
               linesToShow={filteredLines ?? []}
               changedLineNumbers={Array.from(changedLines.keys())
-                .filter((c) => c.startsWith(selectedFile.translatedPath))
-                .map((key) => parseInt(key.split(':')[1], 10))}
+                .map(parseLineKey)
+                .filter((parsed) => parsed?.translatedPath === selectedFile.translatedPath)
+                .map((parsed) => parsed!.lineNumber)}
               onReady={(e) => setGridApi(e.api)}
               translatedStringSearchResult={stringSearchResult}
               matchLanguage={matchLanguage}

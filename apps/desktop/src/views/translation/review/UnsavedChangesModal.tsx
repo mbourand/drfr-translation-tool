@@ -1,13 +1,13 @@
 import { Modal } from '../../../components/Modal'
 import { useSaveChanges } from '../../../hooks/useSaveChanges'
-import { FileType } from '../edit/SidePanel/SidePanel'
+import { TranslationFile } from '../../../types/translation'
 import { useEffect, useState } from 'react'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { useNavigate } from 'react-router'
 
 type UnsavedChangesModalProps = {
   changes: Map<string, string>
-  files: FileType[]
+  files: TranslationFile[]
   branch: string
   hasUnsavedChanges: boolean
   onSaveSuccess?: () => void

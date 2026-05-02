@@ -1,22 +1,21 @@
 import { AgGridReact } from 'ag-grid-react'
 import { CellFocusedEvent, GridApi, GridReadyEvent, ICellRendererParams, NewValueParams } from 'ag-grid-community'
 import { StringSearchResult } from '../../../components/StringSearch/types'
-import { MatchLanguages, ReviewLineType } from '../edit/types'
+import { Line, MatchLanguages } from '../../../types/translation'
 import { myTheme } from '../edit/grid-theme'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { UnfoldMoreIcon } from '../../../components/icons/UnfoldMoreIcon'
 import { UnfoldLessIcon } from '../../../components/icons/UnfoldLessIcon'
 import { TRANSLATION_API_URLS } from '../../../routes/translation/routes'
 import { z } from 'zod'
-import { SendIcon } from '../../../components/icons/SendIcon'
-import { TrashIcon } from '../../../components/icons/TrashIcon'
 import { AddCommentIcon } from '../../../components/icons/AddCommentIcon'
-import { getParts } from '../../../string-search/get-parts'
+import { HighlightedText } from '../../../components/HighlightedText'
+import { LineCommentThread, RESOLVED_COMMENT } from './LineCommentThread'
 
 type TranslationGridProps = {
-  filteredLines: ReviewLineType[]
+  filteredLines: Line[]
   changedLineNumbers: number[]
-  onReady?: (event: GridReadyEvent<ReviewLineType>) => void
+  onReady?: (event: GridReadyEvent<Line>) => void
   matchLanguage: MatchLanguages
   comments: z.infer<ReturnType<(typeof TRANSLATION_API_URLS)['TRANSLATIONS']['LIST_COMMENTS']>['responseSchema']>
   onSendComment: (params: { body: string; line: number; inReplyTo?: number }) => void
@@ -25,13 +24,11 @@ type TranslationGridProps = {
   conflictedLinesNumber: number[]
   editable: boolean
   showAllLines?: boolean
-  onLineEdited: (event: NewValueParams<ReviewLineType, any>) => void
-  onCellFocused: (event: CellFocusedEvent<ReviewLineType, any>) => void
-  onRowDataChanged: (value: ReviewLineType[]) => void
+  onLineEdited: (event: NewValueParams<Line, any>) => void
+  onCellFocused: (event: CellFocusedEvent<Line, any>) => void
+  onRowDataChanged: (value: Line[]) => void
   stringSearchResult: StringSearchResult | null
 }
-
-const RESOLVED_COMMENT = '[RESOLVED]'
 
 const LANGUAGE_COLUMNS = {
   en: 'original',
@@ -56,8 +53,8 @@ export const ReviewTranslationGrid = ({
   matchLanguage
 }: TranslationGridProps) => {
   const gridApi = useRef<GridApi | null>(null)
-  const [selectedChangedLine, setSelectedChangedLine] = useState<ReviewLineType | null>(null)
-  const lineToFocus = useRef<ReviewLineType | null>(null)
+  const [selectedChangedLine, setSelectedChangedLine] = useState<Line | null>(null)
+  const lineToFocus = useRef<Line | null>(null)
 
   const [pinnedPosition, setPinnedPosition] = useState<'Top' | 'Bottom' | 'None'>('None')
 
@@ -118,67 +115,38 @@ export const ReviewTranslationGrid = ({
     if (params.node.rowIndex == null || !params.data || params.colDef?.field === 'oldTranslated') return cellText
 
     const rowIndex = params.node.rowIndex
+    const isHighlightedColumn = params.colDef?.field === LANGUAGE_COLUMNS[matchLanguage]
 
-    const rowMatches = stringSearchResult?.matches.get(rowIndex)
-
-    const pattern = stringSearchResult?.pattern
-    const parts =
-      params.colDef?.field === LANGUAGE_COLUMNS[matchLanguage] && pattern && rowMatches
-        ? getParts(rowMatches, pattern.length, cellText.length)
-        : []
-
-    const getMatchColor = (rowIndex: number, charIndex: number) => {
-      return stringSearchResult?.selectedMatch?.rowIndex == rowIndex &&
-        stringSearchResult?.selectedMatch?.charIndex == charIndex
-        ? 'orange'
-        : 'yellow'
-    }
-
-    const textWithMatches =
-      parts.length > 0 ? (
-        <span>
-          {parts.map(({ start, end, isMatch }, i) => {
-            const part = cellText.slice(start, end)
-            if (isMatch) {
-              return (
-                <span key={i} style={{ backgroundColor: getMatchColor(rowIndex, start), color: 'black' }}>
-                  {part}
-                </span>
-              )
-            }
-            return <span key={i}>{part}</span>
-          })}
-        </span>
-      ) : (
-        <p className="block h-full leading-6">{cellText}</p>
-      )
+    const textWithMatches = isHighlightedColumn ? (
+      <HighlightedText text={cellText} rowIndex={rowIndex} searchResult={stringSearchResult} />
+    ) : (
+      <p className="block h-full leading-6">{cellText}</p>
+    )
 
     if (params.colDef?.field === 'original') return textWithMatches
 
-    const lineComments = comments.filter((comment) => comment.line - 1 === params.data.lineNumber)
+    const lineNumber: number = params.data.lineNumber
+    const lineComments = comments.filter((comment) => comment.line - 1 === lineNumber)
     const isResolved = lineComments[lineComments.length - 1]?.body === RESOLVED_COMMENT
+    const isAddingNewComment = addCommentToLine === lineNumber
+    const showThread = (!isResolved && lineComments.length > 0) || isAddingNewComment
 
     return (
       <div className="w-full">
         <div className="flex items-center justify-between w-full">
           {textWithMatches}
-          {lineNumbersToShow.get(params.data.lineNumber) === true && (
+          {lineNumbersToShow.get(lineNumber) === true && (
             <div className="flex gap-1 h-full items-center">
               {(isResolved || lineComments.length === 0) && (
-                <button className="btn btn-square btn-xs" onClick={() => setAddCommentToLine(params.data.lineNumber)}>
+                <button className="btn btn-square btn-xs" onClick={() => setAddCommentToLine(lineNumber)}>
                   <AddCommentIcon />
                 </button>
               )}
               <button
                 className="btn btn-square btn-xs swap swap-active"
                 onClick={() => {
-                  if (!selectedChangedLine) {
-                    lineToFocus.current = params.data
-                    setSelectedChangedLine(params.data)
-                  } else {
-                    lineToFocus.current = params.data
-                    setSelectedChangedLine(null)
-                  }
+                  lineToFocus.current = params.data
+                  setSelectedChangedLine(selectedChangedLine ? null : params.data)
                 }}
               >
                 <div className={selectedChangedLine ? 'swap-off' : 'swap-on'}>
@@ -191,115 +159,18 @@ export const ReviewTranslationGrid = ({
             </div>
           )}
         </div>
-        {((!isResolved && lineComments.length > 0) || addCommentToLine === params.data.lineNumber) && (
-          <div
-            className="flex flex-col border-2 rounded-md border-base-content/10 mt-4 gap-2 mb-2 bg-base-100"
-            onDoubleClickCapture={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between px-2 pt-2">
-              <h2 className="font-bold text-lg">Commentaires</h2>
-              <button
-                onClick={() => {
-                  setAddCommentToLine(null)
-                  onSendComment({
-                    body: RESOLVED_COMMENT,
-                    line: params.data.lineNumber + 1,
-                    inReplyTo:
-                      addCommentToLine === params.data.lineNumber ? undefined : lineComments[lineComments.length - 1].id
-                  })
-                }}
-                className="btn btn-sm btn-soft"
-              >
-                <p className="h-fit">Marquer comme résolu</p>
-              </button>
-            </div>
-            {lineComments.map((comment) => (
-              <div key={comment.id}>
-                <div className="border-b border-base-content/10" />
-                <div className="flex flex-col gap-2 py-3 px-2">
-                  <div className="flex justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="avatar w-7">
-                        <img className="rounded-full" src={comment.user.avatar_url} alt="" />
-                      </div>
-                      <h3 className="font-semibold">{comment.user.login}</h3>
-                    </div>
-                    <div className="flex gap-2">
-                      {comment.user.login === userLogin && (
-                        <>
-                          <button
-                            className="btn btn-ghost btn-circle btn-neutral text-error btn-xs p-0.5"
-                            onClick={() => {
-                              const pullRequestNumber = parseInt(comment.pull_request_url.split('/').pop() ?? '', 10)
-                              if (isNaN(pullRequestNumber)) return
-
-                              onDeleteCommentClicked({
-                                commentId: comment.id,
-                                pullRequestNumber
-                              })
-                            }}
-                          >
-                            <TrashIcon />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <p className="ml-4">{comment.body}</p>
-                </div>
-              </div>
-            ))}
-            <div className="p-2 flex flex-col gap-2 items-end">
-              <textarea
-                onKeyDownCapture={(e) => e.stopPropagation()}
-                ref={(elem) => textAreaRefs.current.set(params.data.lineNumber, elem)}
-                onChange={(e) => commentAnswers.current.set(params.data.lineNumber, e.target.value)}
-                className="textarea w-full pr-14 "
-                placeholder={addCommentToLine ? 'Ajouter un commentaire...' : 'Répondre...'}
-                defaultValue={commentAnswers.current.get(params.data.lineNumber) || ''}
-              />
-              <div className="flex gap-2">
-                {addCommentToLine === params.data.lineNumber && (
-                  <button
-                    className="btn btn-sm btn-soft"
-                    onClick={() => {
-                      setAddCommentToLine(null)
-                      commentAnswers.current.delete(params.data.lineNumber)
-                      const textArea = textAreaRefs.current.get(params.data.lineNumber)
-                      if (textArea) textArea.value = ''
-                    }}
-                  >
-                    Annuler
-                  </button>
-                )}
-                <button
-                  onClick={() => {
-                    const comment = commentAnswers.current.get(params.data.lineNumber)
-
-                    commentAnswers.current.delete(params.data.lineNumber)
-                    const textArea = textAreaRefs.current.get(params.data.lineNumber)
-                    if (textArea) textArea.value = ''
-
-                    if (!comment || comment.trim() === '') return
-
-                    setAddCommentToLine(null)
-                    onSendComment({
-                      body: comment,
-                      line: params.data.lineNumber + 1,
-                      inReplyTo:
-                        addCommentToLine === params.data.lineNumber
-                          ? undefined
-                          : lineComments[lineComments.length - 1].id
-                    })
-                  }}
-                  className="btn btn-sm btn-primary"
-                >
-                  <p className="h-fit">Envoyer</p>
-                  <SendIcon />
-                </button>
-              </div>
-            </div>
-          </div>
+        {showThread && (
+          <LineCommentThread
+            lineNumber={lineNumber}
+            lineComments={lineComments}
+            userLogin={userLogin}
+            isAddingNewComment={isAddingNewComment}
+            answersRef={commentAnswers}
+            textAreaRefsMap={textAreaRefs}
+            onSendComment={onSendComment}
+            onDeleteComment={onDeleteCommentClicked}
+            onCancelAdd={() => setAddCommentToLine(null)}
+          />
         )}
       </div>
     )

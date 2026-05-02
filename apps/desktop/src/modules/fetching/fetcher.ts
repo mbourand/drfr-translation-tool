@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { fetch } from '@tauri-apps/plugin-http'
+import { store, STORE_KEYS, StoreUserInfos } from '../../store/store'
 
 type HTTPMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'OPTIONS' | 'HEAD' | 'CONNECT' | 'TRACE'
 type BodyMethod = 'POST' | 'PUT' | 'PATCH'
@@ -29,4 +30,16 @@ export const fetchData = async <Route extends APIRoute>(
   const unsafeData = await response.json()
   const data = params.route.responseSchema.parse(unsafeData)
   return data
+}
+
+export const authedFetch = async <Route extends APIRoute>(
+  params: FetchDataParams<Route>
+): Promise<z.infer<Route['responseSchema']>> => {
+  const userInfos = await store.get<StoreUserInfos>(STORE_KEYS.USER_INFOS)
+  if (!userInfos) throw new Error('No token found')
+
+  return fetchData({
+    ...params,
+    headers: { Authorization: `Bearer ${userInfos.accessToken}`, ...params.headers }
+  } as FetchDataParams<Route>)
 }

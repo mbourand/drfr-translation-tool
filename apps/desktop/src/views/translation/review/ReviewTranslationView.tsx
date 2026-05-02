@@ -1,18 +1,22 @@
 import { NavLink, useParams, useSearchParams } from 'react-router'
 import { useTranslationFiles } from '../../../hooks/useTranslationFiles'
+import { useTranslationView } from '../../../hooks/useTranslationView'
 import { ReviewTranslationGrid } from './ReviewTranslationGrid'
 import { ArrowLeftIcon } from '../../../components/icons/ArrowLeftIcon'
+import { DifferenceIcon } from '../../../components/icons/DifferenceIcon'
 import { TRANSLATION_APP_PAGES } from '../../../routes/pages/routes'
-import { StringSearchResult } from '../../../components/StringSearch/types'
-import { MatchLanguages, ReviewLineType } from '../edit/types'
-import { useMemo, useRef, useState } from 'react'
-import { GridApi } from 'ag-grid-community'
-import { isTechnicalString } from '../../../modules/game/strings'
-import { SidePanel } from './SidePanel'
+import { Line, TranslationFile } from '../../../types/translation'
+import { useMemo, useState } from 'react'
+import { TranslationSidePanel } from '../SidePanel'
+import { LaunchGameButton } from '../edit/SidePanel/LaunchGameButton'
+import { SaveChangesButton } from '../edit/SidePanel/SaveChangesButton'
+import { SubmitToReviewButton } from '../edit/SidePanel/SubmitToReviewButton'
+import { ApproveButtonButton } from './ApproveButton'
+import { AskForChangesButton } from './AskForChangesButton'
 import { binarySearch } from '../../../utils'
 import { ENV } from '../../../Env'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { fetchData } from '../../../modules/fetching/fetcher'
+import { authedFetch } from '../../../modules/fetching/fetcher'
 import { TRANSLATION_API_URLS } from '../../../routes/translation/routes'
 import { store, STORE_KEYS, StoreUserInfos } from '../../../store/store'
 import { z } from 'zod'
@@ -21,17 +25,6 @@ import { DialogVisualizer } from '../../../components/DialogVisualizer/DialogVis
 import { ReviewStringSearch } from './ReviewStringSearch'
 import { isRowVisible } from '../isCellVisible'
 import { UnsavedChangesModal } from './UnsavedChangesModal'
-
-export type ReviewFileType = {
-  name: string
-  category: string
-  translatedPath: string
-  lines: ReviewLineType[]
-  pathsInGameFolder: {
-    windows: string
-  }
-  hasChanges: boolean
-}
 
 export const ReviewTranslationView = () => {
   const [searchParams] = useSearchParams()
@@ -78,16 +71,11 @@ export const ReviewTranslationView = () => {
   } = useQuery({
     queryKey: ['comments', branch],
     queryFn: async () => {
-      const userInfos = await store.get<StoreUserInfos>(STORE_KEYS.USER_INFOS)
-      if (!userInfos) throw new Error('No token found')
       if (!branch) throw new Error('No branch provided')
 
-      const response = await fetchData({
-        route: TRANSLATION_API_URLS.TRANSLATIONS.LIST_COMMENTS(branch),
-        headers: { Authorization: `Bearer ${userInfos.accessToken}` }
+      return await authedFetch({
+        route: TRANSLATION_API_URLS.TRANSLATIONS.LIST_COMMENTS(branch)
       })
-
-      return response
     }
   })
 
@@ -103,12 +91,8 @@ export const ReviewTranslationView = () => {
   const deleteComments = useMutation({
     mutationKey: ['delete-comment'],
     mutationFn: async ({ commentId, pullRequestNumber }: { commentId: number; pullRequestNumber: number }) => {
-      const userInfos = await store.get<StoreUserInfos>(STORE_KEYS.USER_INFOS)
-      if (!userInfos) return
-
-      await fetchData({
-        route: TRANSLATION_API_URLS.TRANSLATIONS.DELETE_COMMENT(commentId, pullRequestNumber),
-        headers: { Authorization: `Bearer ${userInfos.accessToken}` }
+      await authedFetch({
+        route: TRANSLATION_API_URLS.TRANSLATIONS.DELETE_COMMENT(commentId, pullRequestNumber)
       })
 
       refetchComments()
@@ -123,13 +107,10 @@ export const ReviewTranslationView = () => {
       inReplyTo,
       filePath
     }: z.infer<typeof TRANSLATION_API_URLS.TRANSLATIONS.ADD_COMMENT.bodySchema>) => {
-      const userInfos = await store.get<StoreUserInfos>(STORE_KEYS.USER_INFOS)
-      if (!userInfos) throw new Error('No user infos found')
       if (!branch) throw new Error('No branch provided')
 
-      await fetchData({
+      await authedFetch({
         route: TRANSLATION_API_URLS.TRANSLATIONS.ADD_COMMENT,
-        headers: { Authorization: `Bearer ${userInfos.accessToken}` },
         body: {
           branch,
           filePath,
@@ -156,17 +137,12 @@ export const ReviewTranslationView = () => {
   const error =
     branchTranslationFilesError ?? masterTranslationFilesError ?? translationFilesAtCreationError ?? commentsError
 
-  const [stringSearchResult, setStringSearchResult] = useState<StringSearchResult | null>(null)
-  const [matchLanguage, setMatchLanguage] = useState<MatchLanguages>('fr')
-  const [gridApi, setGridApi] = useState<GridApi<ReviewLineType> | null>(null)
-  const [selectedFile, setSelectedFile] = useState<ReviewFileType | null>(null)
-  const focusedCellRef = useRef<string | null>(null)
-  const [rowData, setRowData] = useState<ReviewLineType[]>([])
+  const [rowData, setRowData] = useState<Line[]>([])
 
   const gridFiles = useMemo(() => {
     if (!branchTranslationFiles || !translationFilesAtCreation || !masterTranslationFiles) return undefined
 
-    const result: ReviewFileType[] = []
+    const result: TranslationFile[] = []
 
     for (let i = 0; i < branchTranslationFiles?.length; i++) {
       const branchFile = branchTranslationFiles[i]
@@ -199,25 +175,20 @@ export const ReviewTranslationView = () => {
     return result
   }, [branchTranslationFiles, masterTranslationFiles, translationFilesAtCreation])
 
-  const filesByCategory = useMemo(
-    () =>
-      gridFiles?.reduce((acc, file) => {
-        if (!acc[file.category]) acc[file.category] = []
-        acc[file.category].push(file)
-        return acc
-      }, {} as Record<string, ReviewFileType[]>) ?? {},
-    [gridFiles]
-  )
-
-  const selectedFileContents = useMemo(
-    () => gridFiles?.find((file) => file.translatedPath === selectedFile?.translatedPath),
-    [gridFiles, selectedFile]
-  )
-
-  const filteredLines = useMemo(
-    () => selectedFileContents?.lines.filter((line) => !isTechnicalString(line.original)),
-    [selectedFileContents]
-  )
+  const {
+    selectedFile,
+    setSelectedFile,
+    gridApi,
+    setGridApi,
+    stringSearchResult,
+    setStringSearchResult,
+    matchLanguage,
+    setMatchLanguage,
+    focusedCellRef,
+    filesByCategory,
+    selectedFileContents,
+    filteredLines
+  } = useTranslationView(gridFiles)
 
   const changedLines = useMemo(() => {
     if (!filteredLines) return []
@@ -263,16 +234,45 @@ export const ReviewTranslationView = () => {
 
   return (
     <div className="flex flex-row">
-      <SidePanel
-        branch={branch ?? ''}
+      <TranslationSidePanel
         title="Fichiers de traduction"
         categories={filesByCategory}
-        editedLines={editedLines}
-        onSelected={(selected) => setSelectedFile(selected)}
+        onSelected={setSelectedFile}
         selected={selectedFile}
-        isReviewed={isReviewed}
-        isYours={isYours}
-        onSaveSuccess={() => setHasUnsavedChanges(false)}
+        renderFileDecoration={(file) =>
+          file.hasChanges ? (
+            <div className="text-success">
+              <DifferenceIcon />
+            </div>
+          ) : null
+        }
+        footer={
+          <>
+            <LaunchGameButton
+              files={(gridFiles ?? []).map((file) => ({
+                pathsInGameFolder: file.pathsInGameFolder,
+                content: file.lines
+                  .map((line) => editedLines.get(makeLineKey(file.translatedPath, line.lineNumber)) ?? line.translated)
+                  .join('\n'),
+                pathInGitFolder: file.translatedPath
+              }))}
+              changes={editedLines}
+            />
+            {isYours && isReviewed && (
+              <SubmitToReviewButton branch={branch ?? ''} files={gridFiles ?? []} changes={editedLines} />
+            )}
+            {isYours && (
+              <SaveChangesButton
+                branch={branch ?? ''}
+                files={gridFiles ?? []}
+                changes={editedLines}
+                onSaveSuccess={() => setHasUnsavedChanges(false)}
+              />
+            )}
+            {!isYours && <AskForChangesButton branch={branch ?? ''} />}
+            {!isYours && <ApproveButtonButton branch={branch ?? ''} />}
+          </>
+        }
       />
       <div className="flex flex-col items-center w-full px-4">
         <div className="flex flex-row w-full items-center mb-4 pt-2">
@@ -305,7 +305,7 @@ export const ReviewTranslationView = () => {
                 if (!filteredLines || e.rowIndex == null || typeof e.column !== 'object') return
 
                 const value = e.api.getDisplayedRowAtIndex(e.rowIndex)?.data?.[
-                  (e.column?.getColId() as keyof ReviewLineType) ?? 'translated'
+                  (e.column?.getColId() as keyof Line) ?? 'translated'
                 ]
                 if (typeof value !== 'string') return
 

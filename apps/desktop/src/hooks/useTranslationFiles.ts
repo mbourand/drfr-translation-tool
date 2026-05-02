@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { fetchData } from '../modules/fetching/fetcher'
-import { store, STORE_KEYS, StoreUserInfos } from '../store/store'
+import { authedFetch } from '../modules/fetching/fetcher'
 import { TRANSLATION_API_URLS } from '../routes/translation/routes'
+import { TranslationFile } from '../types/translation'
 
 export const useTranslationFiles = (branch?: string, options?: { atBranchCreation: boolean }) => {
   const { atBranchCreation = false } = options ?? {}
@@ -9,29 +9,23 @@ export const useTranslationFiles = (branch?: string, options?: { atBranchCreatio
   const filesDownloadUrls = useQuery({
     queryKey: ['files', branch, atBranchCreation],
     queryFn: async () => {
-      const userInfos = await store.get<StoreUserInfos>(STORE_KEYS.USER_INFOS)
-      if (!userInfos) throw new Error('No token found')
       if (!branch) throw new Error('No branch provided')
 
-      return await fetchData({
+      return await authedFetch({
         route: atBranchCreation
           ? TRANSLATION_API_URLS.TRANSLATIONS.FILES_AT_BRANCH_CREATION(branch)
-          : TRANSLATION_API_URLS.TRANSLATIONS.FILES(branch),
-        headers: { Authorization: `Bearer ${userInfos.accessToken}` }
+          : TRANSLATION_API_URLS.TRANSLATIONS.FILES(branch)
       })
     }
   })
 
-  const translationFiles = useQuery({
+  const translationFiles = useQuery<TranslationFile[]>({
     queryKey: ['files-content', branch, atBranchCreation],
     queryFn: async () => {
       if (!filesDownloadUrls.data) throw new Error('No files download url found')
 
       return await Promise.all(
-        filesDownloadUrls.data.map(async (file) => {
-          const userInfos = await store.get<StoreUserInfos>(STORE_KEYS.USER_INFOS)
-          if (!userInfos) throw new Error('No token found')
-
+        filesDownloadUrls.data.map(async (file): Promise<TranslationFile> => {
           const originalResponse = await fetch(file.original)
           if (!originalResponse.ok) throw new Error('Could not fetch original file')
           const original = await originalResponse.text()
@@ -43,7 +37,7 @@ export const useTranslationFiles = (branch?: string, options?: { atBranchCreatio
           const splittedOriginal = original.split('\n')
           const splittedTranslated = translated.split('\n')
 
-          const lines = Array.from<{ original: string; translated: string }[]>({
+          const lines = Array.from({
             length: Math.max(splittedOriginal.length, splittedTranslated.length)
           }).map((_, i) => ({
             lineNumber: i,
@@ -51,7 +45,14 @@ export const useTranslationFiles = (branch?: string, options?: { atBranchCreatio
             translated: splittedTranslated[i] ?? ''
           }))
 
-          return { ...file, lines }
+          return {
+            name: file.name,
+            category: file.category,
+            originalPath: file.originalPath,
+            translatedPath: file.translatedPath,
+            pathsInGameFolder: file.pathsInGameFolder,
+            lines
+          }
         })
       )
     },

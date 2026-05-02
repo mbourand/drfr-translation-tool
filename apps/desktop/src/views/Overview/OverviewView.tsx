@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { fetchData } from '../../modules/fetching/fetcher'
+import { authedFetch } from '../../modules/fetching/fetcher'
 import { TRANSLATION_API_URLS } from '../../routes/translation/routes'
 import { store, STORE_KEYS, StoreUserInfos } from '../../store/store'
 import { TranslationList } from './TranslationList'
@@ -10,34 +10,16 @@ import { TranslationType } from '../../routes/translation/schemas'
 import { TRANSLATION_APP_PAGES } from '../../routes/pages/routes'
 import { useNavigate } from 'react-router'
 import { z } from 'zod'
+import { readMarker } from '../../modules/prMarkers/prMarkers'
 
 const TRANSLATION_LABEL = 'Traduction'
 const WIP_LABEL = 'En cours'
 
-const APPROVED_BY_PREFIX = '[APPROVED_BY]'
-const APPROVED_BY_SUFFIX = '[/APPROVED_BY]'
-const REQUESTED_CHANGES_PREFIX = '[REQUESTED_CHANGES]'
-const REQUESTED_CHANGES_SUFFIX = '[/REQUESTED_CHANGES]'
+const reviewersSchema = z.array(z.string())
 
 const getReviews = (type: 'approvals' | 'change_requested', pr: TranslationType) => {
-  if (!pr.body) return []
-
-  const prefixToUse = type === 'approvals' ? APPROVED_BY_PREFIX : REQUESTED_CHANGES_PREFIX
-  const suffixToUse = type === 'approvals' ? APPROVED_BY_SUFFIX : REQUESTED_CHANGES_SUFFIX
-
-  const startIndex = pr.body.indexOf(prefixToUse)
-  const endIndex = pr.body.indexOf(suffixToUse)
-  if (startIndex === -1 || endIndex === -1 || startIndex >= endIndex) return []
-
-  const reviewStr = pr.body.slice(startIndex + prefixToUse.length, endIndex)
-
-  try {
-    const review = z.array(z.string()).parse(JSON.parse(reviewStr || '[]'))
-    return review
-  } catch (e) {
-    console.log(e)
-    return []
-  }
+  const markerName = type === 'approvals' ? 'APPROVED_BY' : 'REQUESTED_CHANGES'
+  return readMarker(pr.body, markerName, reviewersSchema) ?? []
 }
 
 const isPrReviewed = (approvals: string[], requestedChanges: string[]) => {
@@ -71,9 +53,8 @@ const getTranslations = async () => {
   const userInfos = await store.get<StoreUserInfos>(STORE_KEYS.USER_INFOS)
   if (!userInfos) throw new Error('No token found')
 
-  const data = await fetchData({
-    route: TRANSLATION_API_URLS.TRANSLATIONS.LIST,
-    headers: { Authorization: `Bearer ${userInfos.accessToken}` }
+  const data = await authedFetch({
+    route: TRANSLATION_API_URLS.TRANSLATIONS.LIST
   })
 
   const prs = data.filter((pr) => pr.labels.some((label) => label.name === TRANSLATION_LABEL))

@@ -1,21 +1,19 @@
 import { useMutation } from '@tanstack/react-query'
-import { store, STORE_KEYS, StoreUserInfos } from '../store/store'
-import { fetchData } from '../modules/fetching/fetcher'
+import { authedFetch } from '../modules/fetching/fetcher'
 import { TRANSLATION_API_URLS } from '../routes/translation/routes'
-import { FileType } from '../views/translation/edit/SidePanel/SidePanel'
+import { TranslationFile } from '../types/translation'
+import { parseLineKey } from '../views/translation/edit/changes'
 
-const computeFileContentsAfterChanges = (files: FileType[], changes: Map<string, string>) => {
+const computeFileContentsAfterChanges = (files: TranslationFile[], changes: Map<string, string>) => {
   const newFiles = [...files]
   for (const [key, value] of changes.entries()) {
-    const matches = key.match(/(.+):(\d+)/)
-    if (!matches) continue
-    const path = matches[1]
-    const lineNumber = parseInt(matches[2], 10)
+    const parsed = parseLineKey(key)
+    if (!parsed) continue
 
-    const fileIndex = newFiles.findIndex((file) => file.translatedPath === path)
+    const fileIndex = newFiles.findIndex((file) => file.translatedPath === parsed.translatedPath)
     if (fileIndex === -1) continue
 
-    newFiles[fileIndex].lines[lineNumber].translated = value
+    newFiles[fileIndex].lines[parsed.lineNumber].translated = value
   }
 
   return newFiles
@@ -28,7 +26,7 @@ export const useSaveChanges = ({
   onSaveSuccess
 }: {
   changes: Map<string, string>
-  files: FileType[]
+  files: TranslationFile[]
   branch: string
   onSaveSuccess?: () => void
 }) => {
@@ -37,17 +35,13 @@ export const useSaveChanges = ({
     mutationFn: async () => {
       if (changes.size === 0) return
 
-      const userInfos = await store.get<StoreUserInfos>(STORE_KEYS.USER_INFOS)
-      if (!userInfos) throw new Error('No token found')
-
       const filesThatChanged = files.filter((file) =>
         Array.from(changes.entries()).find(([key]) => key.startsWith(file.translatedPath))
       )
       const withAppliedChanges = computeFileContentsAfterChanges(filesThatChanged ?? [], changes)
 
-      await fetchData({
+      await authedFetch({
         route: TRANSLATION_API_URLS.TRANSLATIONS.SAVE_FILES,
-        headers: { Authorization: `Bearer ${userInfos.accessToken}` },
         body: {
           branch,
           message: `Sauvegarde ${new Date().toLocaleString('fr-FR', {

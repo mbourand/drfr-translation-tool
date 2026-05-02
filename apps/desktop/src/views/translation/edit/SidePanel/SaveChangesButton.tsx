@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { SaveChangesModal } from './SaveChangesModal'
-import { FileType } from './SidePanel'
+import { TranslationFile } from '../../../../types/translation'
 
 type SaveChangesButtonProps = {
   branch: string
   changes: Map<string, string>
-  files: FileType[]
+  files: TranslationFile[]
   onSaveSuccess?: () => void
 }
 
