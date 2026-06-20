@@ -1,28 +1,41 @@
 import z from 'zod'
 
 /**
- * The review sign-off state of a translation PR, encoded as two marker sections inside the PR body:
+ * The review sign-off state of a translation PR, encoded as four marker sections inside the PR body
+ * — two for the correction stage, two for the QA stage:
  *
  *   [APPROVED_BY]["alice","bob"][/APPROVED_BY]
  *   [REQUESTED_CHANGES]["carol"][/REQUESTED_CHANGES]
+ *   [QA_APPROVED_BY]["dave"][/QA_APPROVED_BY]
+ *   [QA_REQUESTED_CHANGES][][/QA_REQUESTED_CHANGES]
  *
  * Each section holds a JSON array of GitHub logins. This module is the one place that knows that
- * format: how to read the two lists, how to record an approval or a change-request (a reviewer is
- * only ever in one of the two), and how to reset them. Encode/decode used to be four free functions
- * smeared across the controller; folding them here makes the format local and unit-testable.
+ * format: how to read the four lists, how to record an approval or a change-request (a reviewer is
+ * only ever in one of the two lists *within a stage*), and how to reset them. The QA lists are kept
+ * separate from the corrector ones so a QA change-request never disturbs the corrector approvals
+ * (see docs/adr/0001-two-stage-translation-review.md). Reading tolerates legacy bodies that predate
+ * the QA sections: a missing section reads as an empty list.
  */
 
 const APPROVED_BY_PREFIX = '[APPROVED_BY]'
 const APPROVED_BY_SUFFIX = '[/APPROVED_BY]'
 const REQUESTED_CHANGES_PREFIX = '[REQUESTED_CHANGES]'
 const REQUESTED_CHANGES_SUFFIX = '[/REQUESTED_CHANGES]'
+const QA_APPROVED_BY_PREFIX = '[QA_APPROVED_BY]'
+const QA_APPROVED_BY_SUFFIX = '[/QA_APPROVED_BY]'
+const QA_REQUESTED_CHANGES_PREFIX = '[QA_REQUESTED_CHANGES]'
+const QA_REQUESTED_CHANGES_SUFFIX = '[/QA_REQUESTED_CHANGES]'
 
-type SignoffKind = 'approvals' | 'change_requested'
+type SignoffKind = 'approvals' | 'change_requested' | 'qa_approvals' | 'qa_change_requested'
 
-const markersFor = (kind: SignoffKind) =>
-  kind === 'approvals'
-    ? { prefix: APPROVED_BY_PREFIX, suffix: APPROVED_BY_SUFFIX }
-    : { prefix: REQUESTED_CHANGES_PREFIX, suffix: REQUESTED_CHANGES_SUFFIX }
+const MARKERS: Record<SignoffKind, { prefix: string; suffix: string }> = {
+  approvals: { prefix: APPROVED_BY_PREFIX, suffix: APPROVED_BY_SUFFIX },
+  change_requested: { prefix: REQUESTED_CHANGES_PREFIX, suffix: REQUESTED_CHANGES_SUFFIX },
+  qa_approvals: { prefix: QA_APPROVED_BY_PREFIX, suffix: QA_APPROVED_BY_SUFFIX },
+  qa_change_requested: { prefix: QA_REQUESTED_CHANGES_PREFIX, suffix: QA_REQUESTED_CHANGES_SUFFIX }
+}
+
+const markersFor = (kind: SignoffKind) => MARKERS[kind]
 
 function escapeRegExp(text: string) {
   return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')
@@ -102,15 +115,26 @@ const clearReviewers = (kind: SignoffKind, bodyParam: string | null | undefined)
 }
 
 export const ReviewSignoffs = {
-  /** The marker scaffold a new translation PR body starts with: empty approvals and change-requests. */
+  /** The marker scaffold a new translation PR body starts with: all four sign-off lists empty. */
   initialBody: (): string =>
-    `${APPROVED_BY_PREFIX}[]${APPROVED_BY_SUFFIX}\n${REQUESTED_CHANGES_PREFIX}[]${REQUESTED_CHANGES_SUFFIX}`,
+    [
+      `${APPROVED_BY_PREFIX}[]${APPROVED_BY_SUFFIX}`,
+      `${REQUESTED_CHANGES_PREFIX}[]${REQUESTED_CHANGES_SUFFIX}`,
+      `${QA_APPROVED_BY_PREFIX}[]${QA_APPROVED_BY_SUFFIX}`,
+      `${QA_REQUESTED_CHANGES_PREFIX}[]${QA_REQUESTED_CHANGES_SUFFIX}`
+    ].join('\n'),
 
-  /** The logins that have approved. */
+  /** The logins that have approved during correction. */
   approvals: (body: string | null | undefined): string[] => read('approvals', body),
 
-  /** The logins that have requested changes. */
+  /** The logins that have requested changes during correction. */
   changeRequests: (body: string | null | undefined): string[] => read('change_requested', body),
+
+  /** The logins that have approved during QA. */
+  qaApprovals: (body: string | null | undefined): string[] => read('qa_approvals', body),
+
+  /** The logins that have requested changes during QA. */
+  qaChangeRequests: (body: string | null | undefined): string[] => read('qa_change_requested', body),
 
   /** Record `reviewer`'s approval: add them to approvals and drop any change-request they had. */
   approve: (body: string | null | undefined, reviewer: string): string =>
@@ -120,6 +144,17 @@ export const ReviewSignoffs = {
   requestChanges: (body: string | null | undefined, reviewer: string): string =>
     removeReviewer('approvals', addReviewer('change_requested', body, reviewer), reviewer),
 
-  /** Reset the change-requests to empty (used when a branch is (re)submitted for review). */
-  clearChangeRequests: (body: string | null | undefined): string => clearReviewers('change_requested', body)
+  /** Record `reviewer`'s QA approval: add them to QA approvals and drop any QA change-request they had. */
+  qaApprove: (body: string | null | undefined, reviewer: string): string =>
+    removeReviewer('qa_change_requested', addReviewer('qa_approvals', body, reviewer), reviewer),
+
+  /** Record `reviewer` requesting QA changes: add them to QA change-requests and drop any QA approval. */
+  qaRequestChanges: (body: string | null | undefined, reviewer: string): string =>
+    removeReviewer('qa_approvals', addReviewer('qa_change_requested', body, reviewer), reviewer),
+
+  /** Reset the corrector change-requests to empty (used when a branch is (re)submitted for review). */
+  clearChangeRequests: (body: string | null | undefined): string => clearReviewers('change_requested', body),
+
+  /** Reset the QA change-requests to empty (used when a branch is (re)submitted for review). */
+  clearQaChangeRequests: (body: string | null | undefined): string => clearReviewers('qa_change_requested', body)
 }

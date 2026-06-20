@@ -9,12 +9,14 @@ const pr = (over: {
   baseRef: string
   body?: string
   labels?: { name: string }[]
+  author?: string
 }): PullRequest => ({
   number: over.number,
   body: over.body ?? '',
   labels: over.labels ?? [],
   head: { ref: over.headRef },
-  base: { ref: over.baseRef }
+  base: { ref: over.baseRef },
+  user: { login: over.author ?? 'author' }
 })
 
 const makeService = (pullRequests: PullRequest[]) => {

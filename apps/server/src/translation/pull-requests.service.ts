@@ -5,7 +5,7 @@ import { RoutesService } from '@/routes/routes.service'
 
 /**
  * The slice of a GitHub pull request the translation flows read. A superset of every caller's
- * needs (number, body, labels, head/base refs) so one lookup serves them all.
+ * needs (number, body, labels, head/base refs, author login) so one lookup serves them all.
  */
 export type PullRequest = {
   number: number
@@ -13,6 +13,7 @@ export type PullRequest = {
   base: { ref: string }
   head: { ref: string }
   labels: { name: string }[]
+  user: { login: string }
 }
 
 /**
