@@ -4,9 +4,9 @@ import { AuthedRequest, GithubAuthGuard } from '@/auth/github-auth.guard'
 import { BetaReviewsService } from './beta-reviews.service'
 
 class MarkDto {
-  @IsString() filePath!: string
-  @IsString() original!: string
-  @IsString() translated!: string
+  @IsString() filePath: string
+  @IsString() original: string
+  @IsString() translated: string
 }
 
 @UseGuards(GithubAuthGuard)

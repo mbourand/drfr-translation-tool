@@ -19,33 +19,33 @@ class CreateTranslationDto {
   // @IsString()
   // @MinLength(5)
   // @MaxLength(80)
-  name!: string
+  name: string
 }
 
 class SaveFilesFileDto {
   @IsString()
-  path!: string
+  path: string
 
   @IsString()
-  content!: string
+  content: string
 }
 
 class SaveFilesBodyDto {
   @IsString()
-  branch!: string
+  branch: string
 
   @IsString()
-  message!: string
+  message: string
 
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => SaveFilesFileDto)
-  files!: SaveFilesFileDto[]
+  files: SaveFilesFileDto[]
 }
 
 class SubmitToCorrectionDto {
   @IsString()
-  branch!: string
+  branch: string
 }
 
 @Controller('translation')
