@@ -139,7 +139,7 @@ export const EditTranslationView = () => {
           <>
             <LaunchGameButton
               files={(files ?? []).map((file) => ({
-                pathsInGameFolder: file.pathsInGameFolder,
+                pathInGameFolder: file.pathInGameFolder,
                 content: file.lines
                   .map((line) => changedLines.get(makeLineKey(file.translatedPath, line.lineNumber)) ?? line.translated)
                   .join('\n'),

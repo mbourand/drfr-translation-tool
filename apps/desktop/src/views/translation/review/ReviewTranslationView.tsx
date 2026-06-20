@@ -250,7 +250,7 @@ export const ReviewTranslationView = () => {
           <>
             <LaunchGameButton
               files={(gridFiles ?? []).map((file) => ({
-                pathsInGameFolder: file.pathsInGameFolder,
+                pathInGameFolder: file.pathInGameFolder,
                 content: file.lines
                   .map((line) => editedLines.get(makeLineKey(file.translatedPath, line.lineNumber)) ?? line.translated)
                   .join('\n'),

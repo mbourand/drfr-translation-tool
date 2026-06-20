@@ -9,7 +9,7 @@ describe('translation files catalog', () => {
       expect(file.translated).toBeTruthy()
       expect(file.name).toBeTruthy()
       expect(file.category).toBeTruthy()
-      expect(file.pathsInGameFolder.windows).toBeTruthy()
+      expect(file.pathInGameFolder).toBeTruthy()
     }
   })
 
