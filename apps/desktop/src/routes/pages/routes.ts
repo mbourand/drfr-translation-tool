@@ -17,6 +17,5 @@ export const TRANSLATION_APP_PAGES = {
   },
   OVERVIEW: '/overview',
   BETA_QA: '/beta-qa',
-  BETA_REPORTS: (state?: 'open' | 'closed') => `/beta-reports${state ? `?state=${state}` : ''}`,
   PATCH_FILES: '/translation-tool/scripts.zip'
 } as const
