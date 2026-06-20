@@ -1,7 +1,7 @@
 import { createHash } from 'crypto'
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '@/prisma/prisma.service'
-import { findBetaFilePair } from './beta-file-pairs'
+import { findBetaFilePair } from '@/translation/translation-files'
 
 export type HashCount = { contentHash: string; count: number; markedByMe: boolean }
 

@@ -53,6 +53,34 @@ export class GithubHttpService {
   }
 
   /**
+   * Make a GitHub request and own its outcome: throw a diagnostic error on a non-2xx response,
+   * otherwise return the parsed JSON body. This absorbs the `if (!res.ok) throw …` + `res.json()`
+   * boilerplate that every write/read call site used to repeat.
+   *
+   * Pass `operation` (a short label like `'create branch'`) so the thrown message stays specific to
+   * the failing step — the error carries operation + status + url + response body, never flattened.
+   *
+   * An empty response body (e.g. a `204 No Content` from a delete) resolves to `undefined`; type it
+   * with `request<void>(…)` at those call sites. Callers that need response headers (pagination's
+   * `Link`) or want to branch on the status themselves should use `fetch` directly.
+   */
+  public async request<T = unknown>(
+    url: string,
+    options?: { authorization?: string; body?: Record<string, any>; method?: string; operation?: string }
+  ): Promise<T> {
+    const response = await this.fetch(url, options)
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '<unreadable>')
+      const operation = options?.operation ?? 'GitHub request'
+      throw new Error(`${operation} failed: ${response.status} ${response.statusText} ${url} :: ${errorBody}`)
+    }
+
+    const body = await response.text()
+    return (body ? JSON.parse(body) : undefined) as T
+  }
+
+  /**
    * GET a GitHub URL with ETag-based conditional caching. On a 304 response from GitHub
    * the cached body is returned without counting against the rate limit. On 200, the
    * fresh body and ETag are stored.

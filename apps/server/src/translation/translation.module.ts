@@ -4,10 +4,14 @@ import { HttpModule } from '@nestjs/axios'
 import { RoutesModule } from '@/routes/routes.module'
 import { GithubModule } from '@/github/github.module'
 import { GithubHttpService } from '@/github/http.service'
+import { ProgressionService } from '@/progression/progression.service'
+import { RepositoryModule } from '@/repository/repository.module'
+import { GithubAuthGuard } from '@/auth/github-auth.guard'
+import { PullRequestsService } from './pull-requests.service'
 
 @Module({
   controllers: [TranslationController],
-  providers: [GithubHttpService],
-  imports: [HttpModule, RoutesModule, GithubModule]
+  providers: [GithubHttpService, ProgressionService, PullRequestsService, GithubAuthGuard],
+  imports: [HttpModule, RoutesModule, GithubModule, RepositoryModule]
 })
 export class TranslationModule {}
