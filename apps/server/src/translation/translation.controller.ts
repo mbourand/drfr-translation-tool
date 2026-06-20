@@ -315,11 +315,21 @@ export class TranslationController {
     })
     const pullRequestNumber = pullRequest.number
 
-    const hasWipLabel = pullRequest.labels.some((label) => label.name === wipLabel)
+    // GitHub stores label names with a fixed canonical casing and treats them case-insensitively, so
+    // the WIP label actually on the PR can differ in case from TRANSLATION_WIP_LABEL_NAME (e.g. a
+    // config value "En Cours" vs the repo's real "En cours" — which is also what `createTranslation`
+    // ends up applying). Match it case-insensitively and delete it by its real name; a case-sensitive
+    // compare here silently skips the delete and leaves the translation stuck in "En cours".
+    const wipLabelOnPr = pullRequest.labels.find((label) => label.name.toLowerCase() === wipLabel.toLowerCase())
 
-    if (hasWipLabel) {
+    if (wipLabelOnPr) {
       await this.githubHttpService.request(
-        this.routeService.GITHUB_ROUTES.DELETE_LABEL(repositoryOwner, repositoryName, pullRequestNumber, wipLabel),
+        this.routeService.GITHUB_ROUTES.DELETE_LABEL(
+          repositoryOwner,
+          repositoryName,
+          pullRequestNumber,
+          wipLabelOnPr.name
+        ),
         { method: 'DELETE', authorization: req.headers.authorization, operation: 'delete label from PR' }
       )
     }

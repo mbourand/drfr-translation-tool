@@ -48,7 +48,7 @@ describe('Translations QA (e2e)', () => {
       }
     ]),
     // Every mutation (edit PR, delete label) goes through request(); we capture its calls.
-    request: jest.fn<Promise<unknown>, [string, { body?: { body?: unknown } }?]>(async () => ({})),
+    request: jest.fn<Promise<unknown>, [string, { method?: string; body?: { body?: unknown } }?]>(async () => ({})),
     // Mutating endpoints drop the PR-list cache after writing; a no-op here is enough.
     invalidateCachedGet: jest.fn(async () => {}),
     // Defensive: nothing should hit the network on boot, but keep it offline if it does.
@@ -69,7 +69,9 @@ describe('Translations QA (e2e)', () => {
 
   beforeAll(async () => {
     process.env.ENABLE_SMEE = 'false'
-    process.env.TRANSLATION_WIP_LABEL_NAME = 'En cours'
+    // Deliberately a different casing from the repo's real "En cours" label, to prove submit-to-review
+    // removes the WIP label case-insensitively (the bug that left translations stuck in "En cours").
+    process.env.TRANSLATION_WIP_LABEL_NAME = 'En Cours'
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule]
@@ -190,6 +192,19 @@ describe('Translations QA (e2e)', () => {
       expect(ReviewSignoffs.qaChangeRequests(written)).toEqual([])
       expect(ReviewSignoffs.approvals(written)).toEqual(['corrector1', 'corrector2'])
       expect(ReviewSignoffs.qaApprovals(written)).toEqual(['qa1'])
+    })
+
+    it('removes the WIP label case-insensitively, deleting it by its real (PR) name', async () => {
+      // Config WIP label is "En Cours" (see beforeAll); the PR carries the repo's real "En cours".
+      prBody = ReviewSignoffs.initialBody()
+      prLabels = [{ name: 'Traduction' }, { name: 'En cours' }]
+
+      await submitToReview().expect(201)
+
+      const deleteCall = githubStub.request.mock.calls.find((call) => call[1]?.method === 'DELETE')
+      expect(deleteCall).toBeDefined()
+      // Deleted by the label's real casing ("En cours"), not the config's ("En Cours").
+      expect(decodeURIComponent(deleteCall![0])).toContain('/labels/En cours')
     })
   })
 })
