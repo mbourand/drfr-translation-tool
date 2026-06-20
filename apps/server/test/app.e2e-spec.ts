@@ -7,6 +7,13 @@ import { AppModule } from './../src/app.module'
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>
 
+  beforeAll(() => {
+    // Don't spawn the smee webhook-forwarding child process during tests — it stays connected to
+    // smee.io and would keep the jest worker alive at teardown ("failed to exit gracefully"). Set
+    // before AppModule compiles. Mirrors beta-reviews.e2e-spec.
+    process.env.ENABLE_SMEE = 'false'
+  })
+
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule]
@@ -14,6 +21,10 @@ describe('AppController (e2e)', () => {
 
     app = moduleFixture.createNestApplication()
     await app.init()
+  })
+
+  afterEach(async () => {
+    await app?.close()
   })
 
   it('/ (GET)', () => {
