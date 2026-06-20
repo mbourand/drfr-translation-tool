@@ -16,6 +16,7 @@ export class EnvironmentVariables {
   @IsString() REPOSITORY_OWNER: string
   @IsString() REPOSITORY_NAME: string
   @IsString() REPOSITORY_MAIN_BRANCH: string
+  @IsString() REPOSITORY_BETA_BRANCH: string
   @IsString() TRANSLATION_LABEL_NAME: string
   @IsString() TRANSLATION_WIP_LABEL_NAME: string
   @IsString() TRANSLATION_REVIEW_LABEL_NAME: string

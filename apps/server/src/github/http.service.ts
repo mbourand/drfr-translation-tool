@@ -14,6 +14,28 @@ export class GithubHttpService {
 
   constructor(@Inject(CACHE_MANAGER) private readonly cacheManager: Cache) {}
 
+  /**
+   * GET the raw bytes of a repository file (via the GitHub contents API with the `raw` media type)
+   * and return them as a string. Used by the Beta QA read path to fetch `beta`-branch file content.
+   */
+  public async getRawFile(url: string, options?: { authorization?: string }): Promise<string> {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/vnd.github.raw',
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(options?.authorization ? { Authorization: options.authorization } : {})
+      }
+    })
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '<unreadable>')
+      throw new Error(`GitHub raw file request failed: ${response.status} ${response.statusText} ${url} :: ${errorBody}`)
+    }
+
+    return await response.text()
+  }
+
   public async fetch(url: string, options?: { authorization?: string; body?: Record<string, any>; method?: string }) {
     const response = await fetch(url, {
       method: options?.method || 'GET',

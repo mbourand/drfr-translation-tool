@@ -10,6 +10,8 @@ import { EnvironmentVariables } from 'src/env'
 import { TranslationModule } from './translation/translation.module'
 import { CacheModule } from '@nestjs/cache-manager'
 import { GithubModule } from './github/github.module'
+import { PrismaModule } from './prisma/prisma.module'
+import { BetaReviewsModule } from './beta-reviews/beta-reviews.module'
 
 @Module({
   imports: [
@@ -18,11 +20,13 @@ import { GithubModule } from './github/github.module'
       validate: (config) => plainToInstance(EnvironmentVariables, config)
     }),
     CacheModule.register({ isGlobal: true }),
+    PrismaModule,
     AuthModule,
     SmeeModule,
     RoutesModule,
     TranslationModule,
-    GithubModule
+    GithubModule,
+    BetaReviewsModule
   ],
   controllers: [AppController],
   providers: [AppService]

@@ -1,0 +1,25 @@
+// Prisma schema for the Beta QA Review feature.
+// Line identity is (filePath, contentHash); see PRD #5 "Line identity (core decision)".
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// A single QA's mark that they personally verified one line.
+/// A line's distinct-QA count = COUNT(DISTINCT userId) for a (filePath, contentHash).
+model BetaReviewMark {
+  id          String   @id @default(cuid())
+  userId      String // GitHub user id, from the authenticated session
+  filePath    String
+  contentHash String // backend-computed, versioned (e.g. "v1:...")
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, filePath, contentHash]) // a user marks a given line once
+  @@index([filePath, contentHash])
+  @@index([filePath, userId]) // supports "markedByMe" lookups
+}
