@@ -9,17 +9,32 @@ import { CreateTranslationModal } from './CreateTranslationModal'
 import { TranslationType } from '../../routes/translation/schemas'
 import { TRANSLATION_APP_PAGES } from '../../routes/pages/routes'
 import { useNavigate } from 'react-router'
-import { z } from 'zod'
-import { readMarker } from '../../modules/prMarkers/prMarkers'
+import { reviewSignoffs } from '../../modules/prMarkers/reviewSignoffs'
 
 const TRANSLATION_LABEL = 'Traduction'
 const WIP_LABEL = 'En cours'
 
-const reviewersSchema = z.array(z.string())
+const hasWipLabel = (pr: TranslationType) => pr.labels.some((label) => label.name === WIP_LABEL)
+const isMerged = (pr: TranslationType) => !!pr.merged_at && pr.state === 'closed'
 
-const getReviews = (type: 'approvals' | 'change_requested', pr: TranslationType) => {
-  const markerName = type === 'approvals' ? 'APPROVED_BY' : 'REQUESTED_CHANGES'
-  return readMarker(pr.body, markerName, reviewersSchema) ?? []
+type LifecycleColumn = 'wip' | 'changes-requested' | 'awaiting-review' | 'to-test'
+
+/**
+ * The lifecycle column an *open* translation belongs to, derived from its backing PR — the WIP
+ * label plus the corrector and QA sign-off counts — per docs/adr/0001-two-stage-translation-review.md.
+ * Nothing is stored as explicit state; merged translations ("Terminée") are handled separately.
+ *
+ * A change-request from *either* stage takes precedence over the approval-count columns: a
+ * translation awaiting the author's fixes lands in the shared "Changements demandés" column
+ * regardless of how many approvals it has. Once both change-request lists are cleared (resubmit),
+ * a translation with two corrector approvals returns straight to "À tester".
+ */
+const deriveOpenColumn = (pr: TranslationType): LifecycleColumn => {
+  if (hasWipLabel(pr)) return 'wip'
+  if (reviewSignoffs.changeRequests(pr.body).length > 0 || reviewSignoffs.qaChangeRequests(pr.body).length > 0)
+    return 'changes-requested'
+  if (reviewSignoffs.approvals(pr.body).length >= 2) return 'to-test'
+  return 'awaiting-review'
 }
 
 const isPrReviewed = (approvals: string[], requestedChanges: string[]) => {
@@ -27,8 +42,8 @@ const isPrReviewed = (approvals: string[], requestedChanges: string[]) => {
 }
 
 const mapPRToTranslation = (pr: TranslationType, isYours: boolean) => {
-  const approvals = getReviews('approvals', pr)
-  const requestedChanges = getReviews('change_requested', pr)
+  const approvals = reviewSignoffs.approvals(pr.body)
+  const requestedChanges = reviewSignoffs.changeRequests(pr.body)
 
   return {
     id: pr.id,
@@ -61,20 +76,17 @@ const getTranslations = async () => {
 
   const translationMapper = (pr: TranslationType) => mapPRToTranslation(pr, pr.user.id === userInfos.id)
 
-  const hasWipLabel = (pr: TranslationType) => pr.labels.some((label) => label.name === WIP_LABEL)
+  const open = prs.filter((pr) => pr.state === 'open')
+  const openInColumn = (column: LifecycleColumn) =>
+    open.filter((pr) => deriveOpenColumn(pr) === column).map(translationMapper)
 
   return {
-    yourTranslations: prs.filter((pr) => pr.user.id === userInfos.id && pr.state === 'open').map(translationMapper),
-    wipTranslations: prs.filter((pr) => hasWipLabel(pr) && pr.state === 'open').map(translationMapper),
-    waitingForReviewTranslations: prs
-      .filter((pr) => pr.state === 'open' && !hasWipLabel(pr))
-      .map(translationMapper)
-      .filter((pr) => !isPrReviewed(pr.approvals, pr.requestedChanges)),
-    reviewedTranslations: prs
-      .filter((pr) => pr.state === 'open')
-      .map(translationMapper)
-      .filter((pr) => isPrReviewed(pr.approvals, pr.requestedChanges)),
-    doneTranslations: prs.filter((pr) => !!pr.merged_at && pr.state === 'closed').map(translationMapper)
+    yourTranslations: open.filter((pr) => pr.user.id === userInfos.id).map(translationMapper),
+    wipTranslations: openInColumn('wip'),
+    changesRequestedTranslations: openInColumn('changes-requested'),
+    waitingForReviewTranslations: openInColumn('awaiting-review'),
+    toTestTranslations: openInColumn('to-test'),
+    doneTranslations: prs.filter(isMerged).map(translationMapper)
   }
 }
 
@@ -111,15 +123,19 @@ export const OverviewView = () => {
         translations: data.wipTranslations
       },
       {
+        title: 'Changements demandés',
+        translations: data.changesRequestedTranslations
+      },
+      {
         title: 'En attente de relecture',
         translations: data.waitingForReviewTranslations
       },
       {
-        title: 'Relecture effectuée',
-        translations: data.reviewedTranslations
+        title: 'À tester',
+        translations: data.toTestTranslations
       },
       {
-        title: 'Traductions terminées',
+        title: 'Terminée',
         translations: data.doneTranslations
       }
     ]

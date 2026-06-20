@@ -46,6 +46,18 @@ export const TRANSLATION_API_URLS = {
       bodySchema: z.object({ branch: z.string() }),
       responseSchema: z.object({ success: z.boolean() })
     },
+    QA_APPROVE: {
+      url: `${ENV.TRANSLATION_API_BASE_URL}/translation/qa-approve`,
+      method: 'POST',
+      bodySchema: z.object({ branch: z.string() }),
+      responseSchema: z.object({ success: z.boolean() })
+    },
+    QA_REQUEST_CHANGES: {
+      url: `${ENV.TRANSLATION_API_BASE_URL}/translation/qa-request-changes`,
+      method: 'POST',
+      bodySchema: z.object({ branch: z.string() }),
+      responseSchema: z.object({ success: z.boolean() })
+    },
     FILES: (branch: string) =>
       ({
         url: `${ENV.TRANSLATION_API_BASE_URL}/translation/files?branch=${branch}`,
