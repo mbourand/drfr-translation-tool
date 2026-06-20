@@ -11,6 +11,8 @@ type TranslationListProps = {
     title: string
     approvals: string[]
     requestedChanges: string[]
+    qaApprovals: string[]
+    qaChangeRequests: string[]
     author: string
     authorAvatar: string
     href: To
@@ -18,6 +20,52 @@ type TranslationListProps = {
   className?: string
   flexClassName?: string
   extraElements?: ReactNode
+}
+
+const ReviewerAvatars = ({ users }: { users: string[] }) => (
+  <>
+    {users.map((user) => (
+      <div className="rounded-full min-w-[calc(24px-12px)] min-h-6 w-[calc(24px-12px)] h-6" key={user}>
+        <div className="tooltip" data-tip={user}>
+          <img
+            className="rounded-full min-w-6 min-h-6 w-6 h-6"
+            src={`https://github.com/${user}.png?size=128`}
+            alt=""
+          />
+        </div>
+      </div>
+    ))}
+  </>
+)
+
+/**
+ * The card's review feedback in one row: everyone who approved (green check) then everyone who
+ * requested changes (red cross). Correction and QA sign-offs are merged — the fresh-eyes rule keeps
+ * the two sets of people disjoint, so a reviewer never appears twice.
+ */
+const ReviewRow = ({ approvals, changeRequests }: { approvals: string[]; changeRequests: string[] }) => {
+  if (approvals.length + changeRequests.length === 0) return null
+
+  return (
+    <div className="flex flex-row items-center mt-2">
+      {approvals.length > 0 && (
+        <>
+          <div className="text-success mr-[2px]">
+            <CheckIcon />
+          </div>
+          <ReviewerAvatars users={approvals} />
+        </>
+      )}
+      {changeRequests.length > 0 && (
+        <div className={twMerge('flex flex-row', approvals.length > 0 ? 'ml-4' : '')}>
+          <div className="text-error mr-[2px]">
+            <CrossIcon />
+          </div>
+          <ReviewerAvatars users={changeRequests} />
+        </div>
+      )}
+    </div>
+  )
 }
 
 export const TranslationList = ({
@@ -48,46 +96,10 @@ export const TranslationList = ({
                 </div>
               </div>
             </div>
-            {translation.approvals.length + translation.requestedChanges.length > 0 && (
-              <div className="flex flex-row mt-2">
-                {translation.approvals.length > 0 && (
-                  <>
-                    <div className="text-success mr-[2px]">
-                      <CheckIcon />
-                    </div>
-                    {translation.approvals.map((user) => (
-                      <div className="rounded-full min-w-[calc(24px-12px)] min-h-6 w-[calc(24px-12px)] h-6" key={user}>
-                        <div className="tooltip" data-tip={user}>
-                          <img
-                            className="rounded-full min-w-6 min-h-6 w-6 h-6"
-                            src={`https://github.com/${user}.png?size=128`}
-                            alt=""
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </>
-                )}
-                {translation.requestedChanges.length > 0 && (
-                  <div className={twMerge('flex flex-row', translation.approvals.length > 0 ? 'ml-4' : '')}>
-                    <div className="text-error mr-[2px]">
-                      <CrossIcon />
-                    </div>
-                    {translation.requestedChanges.map((user) => (
-                      <div className="rounded-full min-w-[calc(24px-12px)] min-h-6 w-[calc(24px-12px)] h-6" key={user}>
-                        <div className="tooltip" data-tip={user}>
-                          <img
-                            className="rounded-full min-w-6 min-h-6 w-6 h-6"
-                            src={`https://github.com/${user}.png?size=128`}
-                            alt=""
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            <ReviewRow
+              approvals={[...translation.approvals, ...translation.qaApprovals]}
+              changeRequests={[...translation.requestedChanges, ...translation.qaChangeRequests]}
+            />
           </button>
         ))}
         {extraElements}

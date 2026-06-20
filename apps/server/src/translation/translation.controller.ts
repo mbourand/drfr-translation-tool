@@ -1,5 +1,17 @@
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager'
-import { Body, Controller, Delete, Get, Inject, Logger, Post, Query, Req, UseGuards } from '@nestjs/common'
+import {
+  Body,
+  Controller,
+  Delete,
+  ForbiddenException,
+  Get,
+  Inject,
+  Logger,
+  Post,
+  Query,
+  Req,
+  UseGuards
+} from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { Type } from 'class-transformer'
 import { IsArray, IsString, ValidateNested } from 'class-validator'
@@ -11,6 +23,7 @@ import { GithubHttpService } from '@/github/http.service'
 import { ProgressionService } from '@/progression/progression.service'
 import { RepositoryContext } from '@/repository/repository.context'
 import { RoutesService } from '@/routes/routes.service'
+import { isEligibleQaReviewer } from './qa-eligibility'
 import { PullRequestsService } from './pull-requests.service'
 import { ReviewSignoffs } from './review-signoffs'
 import { translationFiles } from './translation-files'
@@ -62,22 +75,7 @@ export class TranslationController {
 
   @Get('/list')
   async getAllTranslations(@Req() req: Request) {
-    const { owner: repositoryOwner, name: repositoryName, mainBranch } = this.repositoryContext
-
-    const [pullRequestsOpen, pullRequestsClosed] = await Promise.all([
-      this.githubHttpService.cachedGet<unknown[]>(
-        this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-          `?base=${mainBranch}&state=open&sort=updated&direction=desc&per_page=100`,
-        { authorization: req.headers.authorization }
-      ),
-      this.githubHttpService.cachedGet<unknown[]>(
-        this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-          `?base=${mainBranch}&state=closed&sort=created&direction=desc&per_page=50`,
-        { authorization: req.headers.authorization }
-      )
-    ])
-
-    return [...pullRequestsOpen, ...pullRequestsClosed]
+    return this.pullRequestsService.list({ authorization: req.headers.authorization })
   }
 
   @Post('/')
@@ -151,6 +149,9 @@ export class TranslationController {
         operation: 'add label to PR'
       }
     )
+
+    // Drop the stale PR-list cache so the freshly-created translation shows up immediately.
+    await this.pullRequestsService.invalidate(head)
 
     return pullRequest
   }
@@ -314,16 +315,29 @@ export class TranslationController {
     })
     const pullRequestNumber = pullRequest.number
 
-    const hasWipLabel = pullRequest.labels.some((label) => label.name === wipLabel)
+    // GitHub stores label names with a fixed canonical casing and treats them case-insensitively, so
+    // the WIP label actually on the PR can differ in case from TRANSLATION_WIP_LABEL_NAME (e.g. a
+    // config value "En Cours" vs the repo's real "En cours" — which is also what `createTranslation`
+    // ends up applying). Match it case-insensitively and delete it by its real name; a case-sensitive
+    // compare here silently skips the delete and leaves the translation stuck in "En cours".
+    const wipLabelOnPr = pullRequest.labels.find((label) => label.name.toLowerCase() === wipLabel.toLowerCase())
 
-    if (hasWipLabel) {
+    if (wipLabelOnPr) {
       await this.githubHttpService.request(
-        this.routeService.GITHUB_ROUTES.DELETE_LABEL(repositoryOwner, repositoryName, pullRequestNumber, wipLabel),
+        this.routeService.GITHUB_ROUTES.DELETE_LABEL(
+          repositoryOwner,
+          repositoryName,
+          pullRequestNumber,
+          wipLabelOnPr.name
+        ),
         { method: 'DELETE', authorization: req.headers.authorization, operation: 'delete label from PR' }
       )
     }
 
-    const pullRequestBody = ReviewSignoffs.clearChangeRequests(pullRequest.body)
+    // Resubmitting clears change-requests from *both* stages so reviewers start from a clean slate;
+    // the corrector and QA approvals are deliberately left intact (a QA-driven fix returns straight
+    // to À tester — see docs/adr/0001-two-stage-translation-review.md).
+    const pullRequestBody = ReviewSignoffs.clearQaChangeRequests(ReviewSignoffs.clearChangeRequests(pullRequest.body))
 
     await this.githubHttpService.request(
       this.routeService.GITHUB_ROUTES.EDIT_PULL_REQUEST(repositoryOwner, repositoryName, pullRequestNumber),
@@ -334,6 +348,8 @@ export class TranslationController {
         operation: 'edit pull request'
       }
     )
+
+    await this.pullRequestsService.invalidate(body.branch)
 
     return { success: true }
   }
@@ -359,6 +375,8 @@ export class TranslationController {
       }
     )
 
+    await this.pullRequestsService.invalidate(body.branch)
+
     return { success: true }
   }
 
@@ -382,6 +400,68 @@ export class TranslationController {
         operation: 'edit pull request'
       }
     )
+
+    await this.pullRequestsService.invalidate(body.branch)
+
+    return { success: true }
+  }
+
+  @UseGuards(GithubAuthGuard)
+  @Post('/qa-approve')
+  async qaApprove(@Req() req: AuthedRequest, @Body() body: { branch: string }) {
+    const { owner: repositoryOwner, name: repositoryName } = this.repositoryContext
+
+    const pullRequest = await this.pullRequestsService.forBranch(body.branch, {
+      authorization: req.headers.authorization
+    })
+
+    if (!isEligibleQaReviewer({ author: pullRequest.user.login, body: pullRequest.body }, req.user.login)) {
+      throw new ForbiddenException('Only a fresh reviewer (not the author or a corrector) can QA this translation')
+    }
+
+    const pullRequestBody = ReviewSignoffs.qaApprove(pullRequest.body, req.user.login)
+
+    await this.githubHttpService.request(
+      this.routeService.GITHUB_ROUTES.EDIT_PULL_REQUEST(repositoryOwner, repositoryName, pullRequest.number),
+      {
+        method: 'PATCH',
+        authorization: req.headers.authorization,
+        body: { body: pullRequestBody, state: 'open' },
+        operation: 'edit pull request'
+      }
+    )
+
+    await this.pullRequestsService.invalidate(body.branch)
+
+    return { success: true }
+  }
+
+  @UseGuards(GithubAuthGuard)
+  @Post('/qa-request-changes')
+  async qaRequestChanges(@Req() req: AuthedRequest, @Body() body: { branch: string }) {
+    const { owner: repositoryOwner, name: repositoryName } = this.repositoryContext
+
+    const pullRequest = await this.pullRequestsService.forBranch(body.branch, {
+      authorization: req.headers.authorization
+    })
+
+    if (!isEligibleQaReviewer({ author: pullRequest.user.login, body: pullRequest.body }, req.user.login)) {
+      throw new ForbiddenException('Only a fresh reviewer (not the author or a corrector) can QA this translation')
+    }
+
+    const pullRequestBody = ReviewSignoffs.qaRequestChanges(pullRequest.body, req.user.login)
+
+    await this.githubHttpService.request(
+      this.routeService.GITHUB_ROUTES.EDIT_PULL_REQUEST(repositoryOwner, repositoryName, pullRequest.number),
+      {
+        method: 'PATCH',
+        authorization: req.headers.authorization,
+        body: { body: pullRequestBody, state: 'open' },
+        operation: 'edit pull request'
+      }
+    )
+
+    await this.pullRequestsService.invalidate(body.branch)
 
     return { success: true }
   }

@@ -13,6 +13,8 @@ import { SaveChangesButton } from '../edit/SidePanel/SaveChangesButton'
 import { SubmitToReviewButton } from '../edit/SidePanel/SubmitToReviewButton'
 import { ApproveButtonButton } from './ApproveButton'
 import { AskForChangesButton } from './AskForChangesButton'
+import { QaReviewPanel } from './QaReviewPanel'
+import { isEligibleQaReviewer, reviewSignoffs } from '../../../modules/prMarkers/reviewSignoffs'
 import { binarySearch } from '../../../utils'
 import { ENV } from '../../../Env'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -87,6 +89,27 @@ export const ReviewTranslationView = () => {
       return userInfos.login
     }
   })
+
+  // The backing PR for this branch, so the review surface can derive the QA stage and counts from
+  // the sign-off markers (the same data the Overview board derives its columns from).
+  const translationPr = useQuery({
+    queryKey: ['translation-pr', branch],
+    queryFn: async () => {
+      if (!branch) throw new Error('No branch provided')
+      const translations = await authedFetch({ route: TRANSLATION_API_URLS.TRANSLATIONS.LIST })
+      const pr = translations.find((translation) => translation.head.ref === branch)
+      if (!pr) throw new Error(`No translation found for branch ${branch}`)
+      return pr
+    }
+  })
+
+  // QA review opens once a translation has its two corrector approvals (it sits in "À tester").
+  const prBody = translationPr.data?.body
+  const isQaStage = reviewSignoffs.approvals(prBody).length >= 2
+  const qaApprovalCount = reviewSignoffs.qaApprovals(prBody).length
+  const isQaReady = qaApprovalCount >= 2
+  const canQaReview =
+    !!userLogin.data && isEligibleQaReviewer(prBody, translationPr.data?.user.login ?? '', userLogin.data)
 
   const deleteComments = useMutation({
     mutationKey: ['delete-comment'],
@@ -269,8 +292,22 @@ export const ReviewTranslationView = () => {
                 onSaveSuccess={() => setHasUnsavedChanges(false)}
               />
             )}
-            {!isYours && <AskForChangesButton branch={branch ?? ''} />}
-            {!isYours && <ApproveButtonButton branch={branch ?? ''} />}
+            {translationPr.data &&
+              (isQaStage ? (
+                <QaReviewPanel
+                  branch={branch ?? ''}
+                  qaApprovalCount={qaApprovalCount}
+                  isReady={isQaReady}
+                  isEligible={canQaReview}
+                />
+              ) : (
+                !isYours && (
+                  <>
+                    <AskForChangesButton branch={branch ?? ''} />
+                    <ApproveButtonButton branch={branch ?? ''} />
+                  </>
+                )
+              ))}
           </>
         }
       />
