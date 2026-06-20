@@ -1,16 +1,13 @@
 import { Body, Controller, Delete, Get, Post, Query, Req, UseGuards } from '@nestjs/common'
 import { IsString } from 'class-validator'
-import { Request } from 'express'
-import { GithubAuthGuard } from '@/auth/github-auth.guard'
+import { AuthedRequest, GithubAuthGuard } from '@/auth/github-auth.guard'
 import { BetaReviewsService } from './beta-reviews.service'
 
 class MarkDto {
-  @IsString() filePath: string
-  @IsString() original: string
-  @IsString() translated: string
+  @IsString() filePath!: string
+  @IsString() original!: string
+  @IsString() translated!: string
 }
-
-type AuthedRequest = Request & { user: { id: string } }
 
 @UseGuards(GithubAuthGuard)
 @Controller('beta-reviews')
