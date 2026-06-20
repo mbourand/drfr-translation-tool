@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Post, Query, Req, UseGuards } from '@nestjs/common'
 import { IsString } from 'class-validator'
 import { Request } from 'express'
-import { GithubAuthGuard } from 'src/auth/github-auth.guard'
+import { GithubAuthGuard } from '@/auth/github-auth.guard'
 import { BetaReviewsService } from './beta-reviews.service'
 
 class MarkDto {

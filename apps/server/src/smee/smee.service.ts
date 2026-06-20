@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import { EnvironmentVariables } from 'src/env'
+import { EnvironmentVariables } from '@/env'
 import { spawn, ChildProcess } from 'child_process'
 
 @Injectable()

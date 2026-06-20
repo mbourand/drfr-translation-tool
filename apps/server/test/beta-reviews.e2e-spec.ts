@@ -1,13 +1,15 @@
 import { INestApplication, ExecutionContext } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import { execSync } from 'child_process'
-import * as request from 'supertest'
+import request from 'supertest'
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import { AppModule } from '../src/app.module'
 import { GithubHttpService } from '../src/github/http.service'
 import { GithubAuthGuard } from '../src/auth/github-auth.guard'
 import { PrismaService } from '../src/prisma/prisma.service'
 import { HashCount } from '../src/beta-reviews/beta-reviews.service'
+
+/* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument -- test doubles legitimately use `any`-typed request objects and non-awaiting async stubs */
 
 /**
  * Single seam: the beta-reviews HTTP endpoints, driven over supertest against a booted Nest app.
@@ -40,7 +42,7 @@ describe('BetaReviews (e2e)', () => {
   }
 
   // Overridden guard: identity comes from the x-test-user-id header instead of a real token.
-  let currentUserId = 'unset'
+  const currentUserId = 'unset'
   const testGuard = {
     canActivate: (context: ExecutionContext) => {
       const req = context.switchToHttp().getRequest()
@@ -91,10 +93,7 @@ describe('BetaReviews (e2e)', () => {
     request(app.getHttpServer()).post('/beta-reviews/marks').set('x-test-user-id', userId).send(body)
 
   const counts = (userId: string, filePath: string) =>
-    request(app.getHttpServer())
-      .get('/beta-reviews/counts')
-      .set('x-test-user-id', userId)
-      .query({ filePath })
+    request(app.getHttpServer()).get('/beta-reviews/counts').set('x-test-user-id', userId).query({ filePath })
 
   const unmark = (userId: string, body: { filePath: string; original: string; translated: string }) =>
     request(app.getHttpServer()).delete('/beta-reviews/marks').set('x-test-user-id', userId).send(body)

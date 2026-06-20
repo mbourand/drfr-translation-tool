@@ -5,10 +5,10 @@ import { Interval } from '@nestjs/schedule'
 import { Type } from 'class-transformer'
 import { IsArray, IsString, ValidateNested } from 'class-validator'
 import { Request } from 'express'
-import { CACHE_KEYS } from 'src/cache/cache.constants'
-import { EnvironmentVariables } from 'src/env'
-import { GithubHttpService } from 'src/github/http.service'
-import { RoutesService } from 'src/routes/routes.service'
+import { CACHE_KEYS } from '@/cache/cache.constants'
+import { EnvironmentVariables } from '@/env'
+import { GithubHttpService } from '@/github/http.service'
+import { RoutesService } from '@/routes/routes.service'
 import z from 'zod'
 
 const APPROVED_BY_PREFIX = '[APPROVED_BY]'
@@ -968,6 +968,7 @@ export class TranslationController {
         })
     )
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const progressions = await Promise.all(
       files.map(async (file) => {
         const originalResponse = await fetch(file.original)

@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager'
-import { CACHE_KEYS } from 'src/cache/cache.constants'
+import { CACHE_KEYS } from '@/cache/cache.constants'
 
 type ConditionalEntry<T> = { etag: string; body: T }
 
@@ -30,7 +30,9 @@ export class GithubHttpService {
 
     if (!response.ok) {
       const errorBody = await response.text().catch(() => '<unreadable>')
-      throw new Error(`GitHub raw file request failed: ${response.status} ${response.statusText} ${url} :: ${errorBody}`)
+      throw new Error(
+        `GitHub raw file request failed: ${response.status} ${response.statusText} ${url} :: ${errorBody}`
+      )
     }
 
     return await response.text()
