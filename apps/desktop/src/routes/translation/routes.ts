@@ -154,5 +154,27 @@ export const TRANSLATION_API_URLS = {
         })
       })
     }
+  },
+  BETA_REVIEWS: {
+    // Distinct-QA counts for the `beta` file, one entry per marked (contentHash). Hashes with no
+    // mark are absent — the client treats a missing line hash as unreviewed (count 0).
+    COUNTS: (filePath: string) =>
+      ({
+        url: `${ENV.TRANSLATION_API_BASE_URL}/beta-reviews/counts?filePath=${encodeURIComponent(filePath)}`,
+        method: 'GET',
+        responseSchema: z.object({ contentHash: z.string(), count: z.number(), markedByMe: z.boolean() }).array()
+      } as const),
+    MARK: {
+      url: `${ENV.TRANSLATION_API_BASE_URL}/beta-reviews/marks`,
+      method: 'POST',
+      bodySchema: z.object({ filePath: z.string(), original: z.string(), translated: z.string() }),
+      responseSchema: z.object({ success: z.boolean() })
+    },
+    UNMARK: {
+      url: `${ENV.TRANSLATION_API_BASE_URL}/beta-reviews/marks`,
+      method: 'DELETE',
+      bodySchema: z.object({ filePath: z.string(), original: z.string(), translated: z.string() }),
+      responseSchema: z.object({ success: z.boolean() })
+    }
   }
 } as const

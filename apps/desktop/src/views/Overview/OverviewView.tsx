@@ -136,6 +136,7 @@ export const OverviewView = () => {
       <main className="h-screen mx-auto max-w-[1700px] w-full flex flex-col gap-6 py-8 px-4">
         <div className="flex flex-row items-center gap-3">
           <h1 className="text-center text-4xl font-bold flex-1">Vue d'ensemble</h1>
+          <BetaQaButton />
           <BetaReportsCard />
           <LogoutButton />
         </div>
@@ -171,6 +172,15 @@ const LogoutButton = () => {
       }}
     >
       Se déconnecter
+    </button>
+  )
+}
+
+const BetaQaButton = () => {
+  const navigate = useNavigate()
+  return (
+    <button className="btn btn-soft h-auto py-2" onClick={() => navigate(TRANSLATION_APP_PAGES.BETA_QA)}>
+      Relecture de la beta
     </button>
   )
 }

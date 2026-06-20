@@ -31,6 +31,6 @@ export class BetaReviewsController {
 
   @Get('counts')
   async counts(@Req() req: AuthedRequest, @Query('filePath') filePath: string) {
-    return this.betaReviewsService.getCounts(filePath, req.user.id, req.headers.authorization)
+    return this.betaReviewsService.getCounts(filePath, req.user.id)
   }
 }
