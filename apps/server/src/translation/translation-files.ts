@@ -5,13 +5,15 @@
  *
  * Each entry pairs the original (VO) repo path with the translated (VF) repo path, plus display
  * metadata (name, category) and where the translated file lives inside an extracted game folder.
+ * `pathInGameFolder` is OS-neutral: Linux runs the identical Steam/Proton Windows build, so the
+ * `chapterN_windows` paths apply unchanged there too (mirrors the `pathInGitFolder` sibling).
  */
 export type TranslationFile = {
   original: string
   translated: string
   name: string
   category: string
-  pathsInGameFolder: { windows: string }
+  pathInGameFolder: string
 }
 
 export const TRANSLATION_FILES: TranslationFile[] = [
@@ -20,54 +22,42 @@ export const TRANSLATION_FILES: TranslationFile[] = [
     translated: 'chapitre-0/strings_fr.txt',
     name: 'Strings du chapitre 0',
     category: 'Chapitre 0',
-    pathsInGameFolder: {
-      windows: 'data.win'
-    }
+    pathInGameFolder: 'data.win'
   },
   {
     original: 'chapitre-1/lang_en.json',
     translated: 'chapitre-1/lang_fr.json',
     name: 'Dialogues du chapitre 1',
     category: 'Chapitre 1',
-    pathsInGameFolder: {
-      windows: 'chapter1_windows/lang/lang_en.json'
-    }
+    pathInGameFolder: 'chapter1_windows/lang/lang_en.json'
   },
   {
     original: 'chapitre-1/strings_en.txt',
     translated: 'chapitre-1/strings_fr.txt',
     name: 'Strings du chapitre 1',
     category: 'Chapitre 1',
-    pathsInGameFolder: {
-      windows: 'chapter1_windows/data.win'
-    }
+    pathInGameFolder: 'chapter1_windows/data.win'
   },
   {
     original: 'chapitre-2/strings_en.txt',
     translated: 'chapitre-2/strings_fr.txt',
     name: 'Strings du chapitre 2',
     category: 'Chapitre 2',
-    pathsInGameFolder: {
-      windows: 'chapter2_windows/data.win'
-    }
+    pathInGameFolder: 'chapter2_windows/data.win'
   },
   {
     original: 'chapitre-3/strings_en.txt',
     translated: 'chapitre-3/strings_fr.txt',
     name: 'Strings du chapitre 3',
     category: 'Chapitre 3',
-    pathsInGameFolder: {
-      windows: 'chapter3_windows/data.win'
-    }
+    pathInGameFolder: 'chapter3_windows/data.win'
   },
   {
     original: 'chapitre-4/strings_en.txt',
     translated: 'chapitre-4/strings_fr.txt',
     name: 'Strings du chapitre 4',
     category: 'Chapitre 4',
-    pathsInGameFolder: {
-      windows: 'chapter4_windows/data.win'
-    }
+    pathInGameFolder: 'chapter4_windows/data.win'
   }
 ]
 

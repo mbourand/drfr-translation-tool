@@ -19,7 +19,7 @@ type ChangeSaveFilesFromNetworkParams = {
 }
 
 export type PatchGameTranslationFile = {
-  pathsInGameFolder: { windows: string }
+  pathInGameFolder: string
   content: string
   pathInGitFolder: string
 }
@@ -59,9 +59,9 @@ export const patchAndLaunchGame = async ({
   await changeSaveFilesFromNetwork({ savesFolder, savesFiles })
 
   for (const file of files) {
-    const absoluteFilePathInGameFolder = await path.join(gameFolder, file.pathsInGameFolder.windows ?? '')
+    const absoluteFilePathInGameFolder = await path.join(gameFolder, file.pathInGameFolder ?? '')
     const originalFilePathInGameFolder = absoluteFilePathInGameFolder + ORIGINAL_FILE_EXT
-    if (!file.pathsInGameFolder.windows.endsWith('.win')) {
+    if (!file.pathInGameFolder.endsWith('.win')) {
       if (await exists(absoluteFilePathInGameFolder)) {
         await rename(absoluteFilePathInGameFolder, originalFilePathInGameFolder)
       }

@@ -46,7 +46,7 @@ export const BetaQaView = () => {
   const launchFiles = useMemo(
     () =>
       (betaTranslationFiles ?? []).map((file) => ({
-        pathsInGameFolder: file.pathsInGameFolder,
+        pathInGameFolder: file.pathInGameFolder,
         content: file.lines.map((line) => line.translated).join('\n'),
         pathInGitFolder: file.translatedPath
       })),

@@ -11,9 +11,7 @@ export type TranslationFile = {
   originalPath: string
   translatedPath: string
   lines: Line[]
-  pathsInGameFolder: {
-    windows: string
-  }
+  pathInGameFolder: string
   hasChanges?: boolean
 }
 

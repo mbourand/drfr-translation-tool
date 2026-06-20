@@ -70,9 +70,7 @@ export const TRANSLATION_API_URLS = {
             category: z.string(),
             originalPath: z.string(),
             translatedPath: z.string(),
-            pathsInGameFolder: z.object({
-              windows: z.string()
-            })
+            pathInGameFolder: z.string()
           })
           .array()
       } as const),
@@ -88,9 +86,7 @@ export const TRANSLATION_API_URLS = {
             category: z.string(),
             originalPath: z.string(),
             translatedPath: z.string(),
-            pathsInGameFolder: z.object({
-              windows: z.string()
-            })
+            pathInGameFolder: z.string()
           })
           .array()
       } as const),

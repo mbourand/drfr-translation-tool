@@ -50,7 +50,7 @@ export const useTranslationFiles = (branch?: string, options?: { atBranchCreatio
             category: file.category,
             originalPath: file.originalPath,
             translatedPath: file.translatedPath,
-            pathsInGameFolder: file.pathsInGameFolder,
+            pathInGameFolder: file.pathInGameFolder,
             lines
           }
         })

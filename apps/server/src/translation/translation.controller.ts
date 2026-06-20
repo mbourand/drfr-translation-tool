@@ -167,7 +167,7 @@ export class TranslationController {
     const { owner: repositoryOwner, name: repositoryName } = this.repositoryContext
 
     const files = await Promise.all(
-      translationFiles.all().map(async ({ original, translated, name, category, pathsInGameFolder }) => {
+      translationFiles.all().map(async ({ original, translated, name, category, pathInGameFolder }) => {
         const originalFile = await this.githubHttpService.request<{ download_url: string }>(
           this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, original) + `?ref=${branch}`,
           { authorization: req.headers.authorization, operation: 'read original file' }
@@ -181,7 +181,7 @@ export class TranslationController {
         return {
           category,
           name,
-          pathsInGameFolder,
+          pathInGameFolder,
           translatedPath: translated,
           originalPath: original,
           original: originalFile.download_url,
@@ -205,7 +205,7 @@ export class TranslationController {
     )
 
     const files = await Promise.all(
-      translationFiles.all().map(async ({ original, translated, name, category, pathsInGameFolder }) => {
+      translationFiles.all().map(async ({ original, translated, name, category, pathInGameFolder }) => {
         const originalFile = await this.githubHttpService.request<{ download_url: string }>(
           this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, original) +
             `?ref=${commitComparisonData.merge_base_commit.sha}`,
@@ -221,7 +221,7 @@ export class TranslationController {
         return {
           category,
           name,
-          pathsInGameFolder,
+          pathInGameFolder,
           translatedPath: translated,
           originalPath: original,
           original: originalFile.download_url,
