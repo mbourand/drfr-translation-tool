@@ -1,0 +1,162 @@
+// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+
+use std::io::{Cursor, Write};
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+
+#[tauri::command]
+async fn import_strings(
+    source_data_win_path: &str,
+    utmt_cli_folder_path: &str,
+    git_chapter_folder_path: &str,
+    git_root_folder_path: &str,
+    output_data_win_path: &str,
+    chapter: u32,
+) -> Result<(), String> {
+    let import_script_path = format!(
+        "{}/Script/UMT/DRFR/ImporterToutTranslationTool.csx",
+        git_root_folder_path
+    );
+    let utmt_cli_exe_path = format!("{}/UndertaleModCli.exe", utmt_cli_folder_path);
+
+    let debug_mode_script_path = format!(
+        "{}/Script/UMT/DRFR/Mode Debug (Chapitre {}).csx",
+        git_root_folder_path,
+        chapter.to_string()
+    );
+
+	println!(
+		"Importing strings for chapter {} using scripts: {}, {}",
+		chapter.to_string(),
+		import_script_path,
+		debug_mode_script_path
+	);
+
+    if !PathBuf::from(&debug_mode_script_path).exists() {
+        println!(
+            "Debug mode script not found for chapter {}. Building without debug mode.",
+            chapter.to_string()
+        );
+    }
+
+    let mut utmt_command = Command::new(utmt_cli_exe_path)
+        .args([
+            "load",
+            &source_data_win_path,
+            "-s",
+            &import_script_path,
+            "-s",
+            &debug_mode_script_path,
+            "-o",
+            &output_data_win_path,
+        ])
+        .stdin(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to start UndertaleModCli command: {}", e))?;
+
+    let mut stdin = utmt_command
+        .stdin
+        .take()
+        .ok_or("Failed to open stdin for UndertaleModCli command")?;
+
+    let git_chapter_folder_path_owned = git_chapter_folder_path.to_owned();
+    std::thread::spawn(move || {
+        let _ = stdin
+            .write_all((git_chapter_folder_path_owned + "\n").as_bytes())
+            .map_err(|e| {
+                format!(
+                    "Failed to write base data directory to UndertaleModCli stdin: {}",
+                    e
+                )
+            });
+        let _ = stdin
+            .flush()
+            .map_err(|e| format!("Failed to flush UndertaleModCli stdin: {}", e));
+    });
+
+    utmt_command
+        .wait()
+        .map_err(|e| format!("Failed to wait for UndertaleModCli command: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn run_game_executable(game_folder_path: &str) -> Result<(), String> {
+    let executable_path = format!("{}/DELTARUNE.exe", game_folder_path);
+    std::process::Command::new(executable_path)
+        .current_dir(game_folder_path)
+        .spawn()
+        .map_err(|e| format!("Failed to start the game executable: {}", e))
+        .map(|_| ())
+}
+
+#[tauri::command]
+async fn pull_changes_from_git(git_folder: &str) -> Result<(), String> {
+    // Switch to master if not on this branch, then git pull, report error if pull or switch failed
+    let output = Command::new("git")
+        .args(["checkout", "master"])
+        .current_dir(git_folder)
+        .output()
+        .map_err(|e| format!("Failed to execute git checkout: {}", e))?;
+
+	println!("Git checkout output: {}", String::from_utf8_lossy(&output.stdout));
+
+    if !output.status.success() {
+        return Err(format!("git checkout failed: {}", String::from_utf8_lossy(&output.stderr)));
+    }
+
+    let output = Command::new("git")
+        .args(["pull", "origin", "master"])
+        .current_dir(git_folder)
+        .output()
+        .map_err(|e| format!("Failed to execute git pull: {}", e))?;
+
+	println!("Git pull output: {}", String::from_utf8_lossy(&output.stdout));
+
+    if !output.status.success() {
+        return Err(format!("git pull failed: {}", String::from_utf8_lossy(&output.stderr)));
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn unzip_file(path: String, target_dir: String) -> Result<(), String> {
+    let archive = std::fs::read(&path)
+        .map_err(|e| format!("Error reading file {}: {}", path, e.to_string()))?;
+    let target_dir_path = PathBuf::from(&target_dir);
+
+    zip_extract::extract(Cursor::new(&archive), &target_dir_path, false)
+        .map_err(|e| format!("Error extracting file {}: {}", path, e.to_string()))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn is_dev() -> bool {
+    return tauri::is_dev();
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_oauth::init())
+        .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![
+            run_game_executable,
+            import_strings,
+            unzip_file,
+            is_dev,
+            pull_changes_from_git,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
