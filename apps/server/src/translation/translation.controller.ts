@@ -236,27 +236,20 @@ export class TranslationController {
     const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
     const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
 
-    const responseOpen = await this.githubHttpService.fetch(
-      this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-        `?base=${mainBranch}&state=open&sort=updated&direction=desc&per_page=100`,
-      { authorization: req.headers.authorization }
-    )
+    const [pullRequestsOpen, pullRequestsClosed] = await Promise.all([
+      this.githubHttpService.cachedGet<unknown[]>(
+        this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
+          `?base=${mainBranch}&state=open&sort=updated&direction=desc&per_page=100`,
+        { authorization: req.headers.authorization }
+      ),
+      this.githubHttpService.cachedGet<unknown[]>(
+        this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
+          `?base=${mainBranch}&state=closed&sort=created&direction=desc&per_page=50`,
+        { authorization: req.headers.authorization }
+      )
+    ])
 
-    const responseClosed = await this.githubHttpService.fetch(
-      this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-        `?base=${mainBranch}&state=closed&sort=created&direction=desc&per_page=50`,
-      { authorization: req.headers.authorization }
-    )
-
-    if (!responseOpen.ok || !responseClosed.ok)
-      throw new Error(`Failed to fetch data ${responseOpen.status} ${responseOpen.statusText}`)
-
-    const pullRequestsOpen = (await responseOpen.json()) as unknown[]
-    const pullRequestsClosed = (await responseClosed.json()) as unknown[]
-
-    const pullRequests = [...pullRequestsOpen, ...pullRequestsClosed]
-
-    return pullRequests as unknown
+    return [...pullRequestsOpen, ...pullRequestsClosed]
   }
 
   @Post('/')
@@ -594,24 +587,19 @@ export class TranslationController {
     const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
     const wipLabel = this.configService.getOrThrow('TRANSLATION_WIP_LABEL_NAME', { infer: true })
 
-    const response = await this.githubHttpService.fetch(
+    const pullRequests = await this.githubHttpService.cachedGet<
+      {
+        number: number
+        base: { ref: string }
+        head: { ref: string }
+        labels: { name: string }[]
+        body: string
+      }[]
+    >(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
         `?head=${body.branch}&base=${mainBranch}&sort=updated&direction=desc&per_page=100`,
       { authorization: req.headers.authorization }
     )
-
-    if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
-    const pullRequests = (await response.json()) as {
-      number: number
-      base: { ref: string }
-      head: { ref: string }
-      labels: { name: string }[]
-      body: string
-    }[]
-
-    if (pullRequests.length === 0) {
-      throw new Error(`No pull request found for branch ${body.branch}`)
-    }
 
     const pullRequest = pullRequests.find((pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch)
     const pullRequestNumber = pullRequest?.number
@@ -658,24 +646,19 @@ export class TranslationController {
     const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
     const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
 
-    const response = await this.githubHttpService.fetch(
+    const pullRequests = await this.githubHttpService.cachedGet<
+      {
+        body: string
+        number: number
+        base: { ref: string }
+        head: { ref: string }
+        labels: { name: string }[]
+      }[]
+    >(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
         `?head=${body.branch}&base=${mainBranch}&sort=updated&direction=desc&per_page=100`,
       { authorization: req.headers.authorization }
     )
-
-    if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
-    const pullRequests = (await response.json()) as {
-      body: string
-      number: number
-      base: { ref: string }
-      head: { ref: string }
-      labels: { name: string }[]
-    }[]
-
-    if (pullRequests.length === 0) {
-      throw new Error(`No pull request found for branch ${body.branch}`)
-    }
 
     const pullRequest = pullRequests.find((pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch)
     if (!pullRequest) {
@@ -714,23 +697,18 @@ export class TranslationController {
     const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
     const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
 
-    const response = await this.githubHttpService.fetch(
+    const pullRequests = await this.githubHttpService.cachedGet<
+      {
+        number: number
+        base: { ref: string }
+        head: { ref: string }
+        body: string
+      }[]
+    >(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
         `?head=${body.branch}&base=${mainBranch}&sort=updated&direction=desc&per_page=100`,
       { authorization: req.headers.authorization }
     )
-
-    if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
-    const pullRequests = (await response.json()) as {
-      number: number
-      base: { ref: string }
-      head: { ref: string }
-      body: string
-    }[]
-
-    if (pullRequests.length === 0) {
-      throw new Error(`No pull request found for branch ${body.branch}`)
-    }
 
     const pullRequest = pullRequests.find((pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch)
     if (!pullRequest) {
@@ -768,18 +746,13 @@ export class TranslationController {
     const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
     const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
 
-    const response = await this.githubHttpService.fetch(
+    const pullRequests = await this.githubHttpService.cachedGet<
+      { number: number; base: { ref: string }; head: { ref: string } }[]
+    >(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
         `?head=${branch}&base=${mainBranch}&sort=updated&direction=desc&per_page=100`,
       { authorization: req.headers.authorization }
     )
-
-    if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
-    const pullRequests = (await response.json()) as { number: number; base: { ref: string }; head: { ref: string } }[]
-
-    if (pullRequests.length === 0) {
-      throw new Error(`No pull request found for branch ${branch}`)
-    }
 
     const pullRequestNumber = pullRequests.find((pr) => pr.head.ref === branch && pr.base.ref === mainBranch)?.number
     if (!pullRequestNumber) {
@@ -804,7 +777,8 @@ export class TranslationController {
         { authorization: req.headers.authorization }
       )
 
-      if (!commentsResponse.ok) throw new Error(`Failed to fetch comments ${response.status} ${response.statusText}`)
+      if (!commentsResponse.ok)
+        throw new Error(`Failed to fetch comments ${commentsResponse.status} ${commentsResponse.statusText}`)
       comments = comments.concat(
         ((await commentsResponse.json()) as { original_line?: number }[]).filter(
           (comment) => comment.original_line != null
@@ -834,18 +808,13 @@ export class TranslationController {
     const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
     const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
 
-    const response = await this.githubHttpService.fetch(
+    const pullRequests = await this.githubHttpService.cachedGet<
+      { number: number; base: { ref: string }; head: { ref: string } }[]
+    >(
       this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
         `?head=${body.branch}&base=${mainBranch}&sort=updated&direction=desc&per_page=100`,
       { authorization: req.headers.authorization }
     )
-
-    if (!response.ok) throw new Error(`Failed to fetch data ${response.status} ${response.statusText}`)
-    const pullRequests = (await response.json()) as { number: number; base: { ref: string }; head: { ref: string } }[]
-
-    if (pullRequests.length === 0) {
-      throw new Error(`No pull request found for branch ${body.branch}`)
-    }
 
     const pullRequestNumber = pullRequests.find(
       (pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch
