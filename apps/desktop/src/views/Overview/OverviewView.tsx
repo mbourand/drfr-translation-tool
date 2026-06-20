@@ -11,8 +11,6 @@ import { TRANSLATION_APP_PAGES } from '../../routes/pages/routes'
 import { useNavigate } from 'react-router'
 import { z } from 'zod'
 import { readMarker } from '../../modules/prMarkers/prMarkers'
-import { useBetaReports } from '../../hooks/useBetaReports'
-import { getReportSeverity } from '../beta-reports/reportSelectors'
 
 const TRANSLATION_LABEL = 'Traduction'
 const WIP_LABEL = 'En cours'
@@ -136,7 +134,7 @@ export const OverviewView = () => {
       <main className="h-screen mx-auto max-w-[1700px] w-full flex flex-col gap-6 py-8 px-4">
         <div className="flex flex-row items-center gap-3">
           <h1 className="text-center text-4xl font-bold flex-1">Vue d'ensemble</h1>
-          <BetaReportsCard />
+          <BetaQaButton />
           <LogoutButton />
         </div>
         <section className="flex flex-row w-full gap-2 h-full relative">
@@ -175,33 +173,11 @@ const LogoutButton = () => {
   )
 }
 
-const BetaReportsCard = () => {
+const BetaQaButton = () => {
   const navigate = useNavigate()
-  const { data: reports } = useBetaReports('open')
-
-  const counts = useMemo(() => {
-    const result = { total: reports?.length ?? 0, blocker: 0, major: 0, minor: 0 }
-    for (const report of reports ?? []) {
-      const severity = getReportSeverity(report)
-      if (severity === 'blocker') result.blocker++
-      else if (severity === 'major') result.major++
-      else if (severity === 'minor') result.minor++
-    }
-    return result
-  }, [reports])
-
   return (
-    <button
-      className="btn btn-soft h-auto py-2 flex flex-col items-end gap-1"
-      onClick={() => navigate(TRANSLATION_APP_PAGES.BETA_REPORTS('open'))}
-    >
-      <span className="text-sm font-semibold">Signalements ouverts</span>
-      <div className="flex flex-row gap-2 text-xs">
-        <span className="badge badge-error badge-sm">{counts.blocker}</span>
-        <span className="badge badge-warning badge-sm">{counts.major}</span>
-        <span className="badge badge-success badge-sm">{counts.minor}</span>
-        <span className="opacity-60">total {counts.total}</span>
-      </div>
+    <button className="btn btn-soft h-auto py-2" onClick={() => navigate(TRANSLATION_APP_PAGES.BETA_QA)}>
+      Relecture de la beta
     </button>
   )
 }

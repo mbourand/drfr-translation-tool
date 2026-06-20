@@ -1,7 +1,7 @@
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager'
 import { Body, Controller, Inject, InternalServerErrorException, Post, Req } from '@nestjs/common'
 import { Request } from 'express'
-import { CACHE_KEYS } from 'src/cache/cache.constants'
+import { CACHE_KEYS } from '@/cache/cache.constants'
 
 @Controller('github')
 export class GithubController {

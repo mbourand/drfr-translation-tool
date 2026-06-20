@@ -7,7 +7,7 @@ import { lazy, useEffect } from 'react'
 import { OverviewView } from './views/Overview/OverviewView'
 import { EditTranslationView } from './views/translation/edit/EditTranslationView'
 import { ReviewTranslationView } from './views/translation/review/ReviewTranslationView'
-import { BetaReportsView } from './views/beta-reports/BetaReportsView'
+import { BetaQaView } from './views/translation/beta-qa/BetaQaView'
 import { stopOAuthServer } from './lib/oauth'
 import { store, STORE_KEYS } from './store/store'
 
@@ -35,7 +35,7 @@ function App() {
           <Route path={TRANSLATION_APP_PAGES.OVERVIEW} element={<OverviewView />} />
           <Route path={TRANSLATION_APP_PAGES.TRANSLATION.EDIT(':branch')} element={<EditTranslationView />}></Route>
           <Route path={TRANSLATION_APP_PAGES.TRANSLATION.REVIEW(':branch')} element={<ReviewTranslationView />}></Route>
-          <Route path="/beta-reports" element={<BetaReportsView />} />
+          <Route path={TRANSLATION_APP_PAGES.BETA_QA} element={<BetaQaView />} />
         </Routes>
       </BrowserRouter>
       <div id="modal"></div>

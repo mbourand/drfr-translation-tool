@@ -1,192 +1,19 @@
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager'
-import { Body, Controller, Delete, Get, Inject, Logger, Post, Query, Req } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Inject, Logger, Post, Query, Req, UseGuards } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import { Interval } from '@nestjs/schedule'
 import { Type } from 'class-transformer'
 import { IsArray, IsString, ValidateNested } from 'class-validator'
 import { Request } from 'express'
-import { CACHE_KEYS } from 'src/cache/cache.constants'
-import { EnvironmentVariables } from 'src/env'
-import { GithubHttpService } from 'src/github/http.service'
-import { RoutesService } from 'src/routes/routes.service'
-import z from 'zod'
-
-const APPROVED_BY_PREFIX = '[APPROVED_BY]'
-const APPROVED_BY_SUFFIX = '[/APPROVED_BY]'
-const REQUESTED_CHANGES_PREFIX = '[REQUESTED_CHANGES]'
-const REQUESTED_CHANGES_SUFFIX = '[/REQUESTED_CHANGES]'
-
-function escapeRegExp(text: string) {
-  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')
-}
-
-const getReviews = (type: 'approvals' | 'change_requested', body: string | null | undefined) => {
-  if (!body) return []
-
-  const prefixToUse = type === 'approvals' ? APPROVED_BY_PREFIX : REQUESTED_CHANGES_PREFIX
-  const suffixToUse = type === 'approvals' ? APPROVED_BY_SUFFIX : REQUESTED_CHANGES_SUFFIX
-
-  const startIndex = body.indexOf(prefixToUse)
-  const endIndex = body.indexOf(suffixToUse)
-  if (startIndex === -1 || endIndex === -1 || startIndex >= endIndex) return []
-
-  const reviewStr = body.slice(startIndex + prefixToUse.length, endIndex)
-
-  try {
-    const review = z.array(z.string()).parse(JSON.parse(reviewStr || '[]'))
-    return review
-  } catch (e) {
-    console.log(e)
-    return []
-  }
-}
-
-const addReviewerToBody = (
-  type: 'approvals' | 'change_requested',
-  bodyParam: string | null | undefined,
-  reviewer: string
-) => {
-  const body = bodyParam || ''
-
-  const prefixToUse = type === 'approvals' ? APPROVED_BY_PREFIX : REQUESTED_CHANGES_PREFIX
-  const suffixToUse = type === 'approvals' ? APPROVED_BY_SUFFIX : REQUESTED_CHANGES_SUFFIX
-
-  const startIndex = body.indexOf(prefixToUse)
-  const endIndex = body.indexOf(suffixToUse)
-
-  if (startIndex === -1 || endIndex === -1) {
-    return `${prefixToUse}${JSON.stringify([reviewer])}${suffixToUse}\n` + body
-  }
-
-  if (startIndex >= endIndex) {
-    throw new Error(`Invalid body format: pull request contains an invalid ${type} section`)
-  }
-
-  const reviews = getReviews(type, body)
-  if (!reviews.includes(reviewer)) {
-    reviews.push(reviewer)
-  }
-
-  return body.replace(
-    new RegExp(`${escapeRegExp(prefixToUse)}.*?${escapeRegExp(suffixToUse)}`),
-    `${prefixToUse}${JSON.stringify(reviews)}${suffixToUse}`
-  )
-}
-
-const clearReviewersFromBody = (type: 'approvals' | 'change_requested', bodyParam: string | null | undefined) => {
-  const body = bodyParam || ''
-
-  const prefixToUse = type === 'approvals' ? APPROVED_BY_PREFIX : REQUESTED_CHANGES_PREFIX
-  const suffixToUse = type === 'approvals' ? APPROVED_BY_SUFFIX : REQUESTED_CHANGES_SUFFIX
-
-  return body.replace(
-    new RegExp(`${escapeRegExp(prefixToUse)}.*?${escapeRegExp(suffixToUse)}`),
-    `${prefixToUse}[]${suffixToUse}`
-  )
-}
-
-const removeReviewerFromBody = (
-  type: 'approvals' | 'change_requested',
-  bodyParam: string | null | undefined,
-  reviewer: string
-) => {
-  const body = bodyParam || ''
-
-  const prefixToUse = type === 'approvals' ? APPROVED_BY_PREFIX : REQUESTED_CHANGES_PREFIX
-  const suffixToUse = type === 'approvals' ? APPROVED_BY_SUFFIX : REQUESTED_CHANGES_SUFFIX
-
-  const startIndex = body.indexOf(prefixToUse)
-  const endIndex = body.indexOf(suffixToUse)
-
-  if (startIndex === -1 || endIndex === -1) {
-    return body
-  }
-
-  if (startIndex >= endIndex) {
-    throw new Error(`Invalid body format: pull request contains an invalid ${type} section`)
-  }
-
-  const reviews = getReviews(type, body).filter((r) => r !== reviewer)
-
-  return body.replace(
-    new RegExp(`${escapeRegExp(prefixToUse)}.*?${escapeRegExp(suffixToUse)}`),
-    `${prefixToUse}${JSON.stringify(reviews)}${suffixToUse}`
-  )
-}
-
-const filePaths = [
-  {
-    original: 'chapitre-0/strings_en.txt',
-    translated: 'chapitre-0/strings_fr.txt',
-    name: 'Strings du chapitre 0',
-    category: 'Chapitre 0',
-    pathsInGameFolder: {
-      windows: 'data.win'
-    }
-  },
-  {
-    original: 'chapitre-1/lang_en.json',
-    translated: 'chapitre-1/lang_fr.json',
-    name: 'Dialogues du chapitre 1',
-    category: 'Chapitre 1',
-    pathsInGameFolder: {
-      windows: 'chapter1_windows/lang/lang_en.json'
-    }
-  },
-  {
-    original: 'chapitre-1/strings_en.txt',
-    translated: 'chapitre-1/strings_fr.txt',
-    name: 'Strings du chapitre 1',
-    category: 'Chapitre 1',
-    pathsInGameFolder: {
-      windows: 'chapter1_windows/data.win'
-    }
-  },
-  {
-    original: 'chapitre-2/strings_en.txt',
-    translated: 'chapitre-2/strings_fr.txt',
-    name: 'Strings du chapitre 2',
-    category: 'Chapitre 2',
-    pathsInGameFolder: {
-      windows: 'chapter2_windows/data.win'
-    }
-  },
-  {
-    original: 'chapitre-3/strings_en.txt',
-    translated: 'chapitre-3/strings_fr.txt',
-    name: 'Strings du chapitre 3',
-    category: 'Chapitre 3',
-    pathsInGameFolder: {
-      windows: 'chapter3_windows/data.win'
-    }
-  },
-  {
-    original: 'chapitre-4/strings_en.txt',
-    translated: 'chapitre-4/strings_fr.txt',
-    name: 'Strings du chapitre 4',
-    category: 'Chapitre 4',
-    pathsInGameFolder: {
-      windows: 'chapter4_windows/data.win'
-    }
-  }
-]
-
-const automaticallyTranslatedLines = {
-  'Strings du chapitre 3': 4546,
-  'Strings du chapitre 4': 4217
-}
-
-const isTechnicalString = (line: string) =>
-  line.trim() === '' ||
-  line.startsWith('obj_') ||
-  line.startsWith('scr_') ||
-  line.startsWith('gml_') ||
-  line.startsWith('DEVICE_') ||
-  /\.[a-z]{2,3}$/.test(line) ||
-  !line.includes(' ') ||
-  /^[a-z]+$/.test(line) ||
-  /^[A-Za-z]*_[a-zA-Z0-9_]*$/.test(line) ||
-  /^[a-z]+[A-Z0-9][a-zA-Z0-9]*$/.test(line)
+import { AuthedRequest, GithubAuthGuard } from '@/auth/github-auth.guard'
+import { CACHE_KEYS } from '@/cache/cache.constants'
+import { EnvironmentVariables } from '@/env'
+import { GithubHttpService } from '@/github/http.service'
+import { ProgressionService } from '@/progression/progression.service'
+import { RepositoryContext } from '@/repository/repository.context'
+import { RoutesService } from '@/routes/routes.service'
+import { PullRequestsService } from './pull-requests.service'
+import { ReviewSignoffs } from './review-signoffs'
+import { translationFiles } from './translation-files'
 
 class CreateTranslationDto {
   // @IsString()
@@ -227,14 +54,15 @@ export class TranslationController {
     private readonly routeService: RoutesService,
     private readonly configService: ConfigService<EnvironmentVariables>,
     private readonly githubHttpService: GithubHttpService,
+    private readonly progressionService: ProgressionService,
+    private readonly repositoryContext: RepositoryContext,
+    private readonly pullRequestsService: PullRequestsService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache
   ) {}
 
   @Get('/list')
   async getAllTranslations(@Req() req: Request) {
-    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
-    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
-    const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
+    const { owner: repositoryOwner, name: repositoryName, mainBranch } = this.repositoryContext
 
     const [pullRequestsOpen, pullRequestsClosed] = await Promise.all([
       this.githubHttpService.cachedGet<unknown[]>(
@@ -254,23 +82,14 @@ export class TranslationController {
 
   @Post('/')
   async createTranslation(@Req() req: Request, @Body() body: CreateTranslationDto) {
-    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
-    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
-    const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
+    const { owner: repositoryOwner, name: repositoryName, mainBranch } = this.repositoryContext
     const translationLabel = this.configService.getOrThrow('TRANSLATION_LABEL_NAME', { infer: true })
     const wipLabel = this.configService.getOrThrow('TRANSLATION_WIP_LABEL_NAME', { infer: true })
 
-    const lastMasterCommitResponse = await this.githubHttpService.fetch(
+    const lastMasterCommit = await this.githubHttpService.request<{ sha: string }>(
       this.routeService.GITHUB_ROUTES.COMMITS(repositoryOwner, repositoryName, mainBranch),
-      { authorization: req.headers.authorization }
+      { authorization: req.headers.authorization, operation: 'retrieve last commit' }
     )
-
-    if (!lastMasterCommitResponse.ok)
-      throw new Error(
-        `Failed to retrieve last commit ${lastMasterCommitResponse.status} ${lastMasterCommitResponse.statusText}`
-      )
-
-    const lastMasterCommit = (await lastMasterCommitResponse.json()) as { sha: string }
 
     const head = body.name
       .replace(/[^a-zA-Z0-9_\s]/g, '')
@@ -280,34 +99,20 @@ export class TranslationController {
 
     const ref = `refs/heads/${head}`
 
-    const refCreationResponse = await this.githubHttpService.fetch(
-      this.routeService.GITHUB_ROUTES.CREATE_REF(repositoryOwner, repositoryName),
-      {
-        method: 'POST',
-        authorization: req.headers.authorization,
-        body: { ref, sha: lastMasterCommit.sha }
-      }
-    )
+    await this.githubHttpService.request(this.routeService.GITHUB_ROUTES.CREATE_REF(repositoryOwner, repositoryName), {
+      method: 'POST',
+      authorization: req.headers.authorization,
+      body: { ref, sha: lastMasterCommit.sha },
+      operation: 'create branch'
+    })
 
-    if (!refCreationResponse.ok)
-      throw new Error(
-        `Failed to create branch ${refCreationResponse.status} ${refCreationResponse.statusText} ${await refCreationResponse.text()}`
-      )
-
-    const branchIdentifierContentsResponse = await this.githubHttpService.fetch(
+    const branchIdentifierContents = await this.githubHttpService.request<{ sha: string }>(
       this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, '.branch-identifier') + `?ref=${head}`,
-      { authorization: req.headers.authorization }
+      { authorization: req.headers.authorization, operation: 'read branch identifier' }
     )
-
-    if (!branchIdentifierContentsResponse.ok)
-      throw new Error(
-        `Failed to read branch identifier ${branchIdentifierContentsResponse.status} ${branchIdentifierContentsResponse.statusText} ${await branchIdentifierContentsResponse.text()}`
-      )
-
-    const branchIdentifierContents = (await branchIdentifierContentsResponse.json()) as { sha: string }
 
     // Edit readme.md to add the branch name at the end
-    const editionResponse = await this.githubHttpService.fetch(
+    await this.githubHttpService.request(
       this.routeService.GITHUB_ROUTES.EDIT_FILE(repositoryOwner, repositoryName, '.branch-identifier'),
       {
         method: 'PUT',
@@ -317,16 +122,12 @@ export class TranslationController {
           content: Buffer.from(head).toString('base64'),
           branch: head,
           sha: branchIdentifierContents.sha
-        }
+        },
+        operation: 'edit branch identifier'
       }
     )
 
-    if (!editionResponse.ok)
-      throw new Error(
-        `Failed to edit branch identifier ${editionResponse.status} ${editionResponse.statusText} ${await editionResponse.text()}`
-      )
-
-    const pullRequestCreationResponse = await this.githubHttpService.fetch(
+    const pullRequest = await this.githubHttpService.request<{ number: number }>(
       this.routeService.GITHUB_ROUTES.CREATE_PULL_REQUEST(repositoryOwner, repositoryName),
       {
         method: 'POST',
@@ -335,31 +136,21 @@ export class TranslationController {
           title: body.name,
           head,
           base: mainBranch,
-          body: '[APPROVED_BY][][/APPROVED_BY]\n[REQUESTED_CHANGES][][/REQUESTED_CHANGES]'
-        }
+          body: ReviewSignoffs.initialBody()
+        },
+        operation: 'create PR'
       }
     )
 
-    if (!pullRequestCreationResponse.ok)
-      throw new Error(
-        `Failed to create PR ${pullRequestCreationResponse.status} ${pullRequestCreationResponse.statusText} ${await pullRequestCreationResponse.text()}`
-      )
-
-    const pullRequest = (await pullRequestCreationResponse.json()) as { number: number }
-
-    const addLabelResponse = await this.githubHttpService.fetch(
+    await this.githubHttpService.request(
       this.routeService.GITHUB_ROUTES.ADD_LABEL(repositoryOwner, repositoryName, pullRequest.number),
       {
         method: 'POST',
         authorization: req.headers.authorization,
-        body: [translationLabel, wipLabel]
+        body: [translationLabel, wipLabel],
+        operation: 'add label to PR'
       }
     )
-
-    if (!addLabelResponse.ok)
-      throw new Error(
-        `Failed to add label to PR ${addLabelResponse.status} ${addLabelResponse.statusText} ${await addLabelResponse.text()}`
-      )
 
     return pullRequest
   }
@@ -372,34 +163,19 @@ export class TranslationController {
     //   return cachedFiles
     // }
 
-    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
-    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
+    const { owner: repositoryOwner, name: repositoryName } = this.repositoryContext
 
     const files = await Promise.all(
-      filePaths.map(async ({ original, translated, name, category, pathsInGameFolder }) => {
-        const originalFileResponse = await this.githubHttpService.fetch(
+      translationFiles.all().map(async ({ original, translated, name, category, pathsInGameFolder }) => {
+        const originalFile = await this.githubHttpService.request<{ download_url: string }>(
           this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, original) + `?ref=${branch}`,
-          { authorization: req.headers.authorization }
+          { authorization: req.headers.authorization, operation: 'read original file' }
         )
 
-        if (!originalFileResponse.ok)
-          throw new Error(
-            `Failed to read original file ${originalFileResponse.status} ${originalFileResponse.statusText} ${await originalFileResponse.text()}`
-          )
-
-        const originalFile = (await originalFileResponse.json()) as { download_url: string }
-
-        const translatedFileResponse = await this.githubHttpService.fetch(
+        const translatedFile = await this.githubHttpService.request<{ download_url: string }>(
           this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, translated) + `?ref=${branch}`,
-          { authorization: req.headers.authorization }
+          { authorization: req.headers.authorization, operation: 'read translated file' }
         )
-
-        if (!translatedFileResponse.ok)
-          throw new Error(
-            `Failed to read translated file ${translatedFileResponse.status} ${translatedFileResponse.statusText} ${await translatedFileResponse.text()}`
-          )
-
-        const translatedFile = (await translatedFileResponse.json()) as { download_url: string }
 
         return {
           category,
@@ -420,48 +196,26 @@ export class TranslationController {
 
   @Get('/files-at-branch-creation')
   public async getFilesAtBranchCreation(@Req() req: Request, @Query('branch') branch: string) {
-    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
-    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
-    const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
+    const { owner: repositoryOwner, name: repositoryName, mainBranch } = this.repositoryContext
 
-    const commitComparisonResponse = await this.githubHttpService.fetch(
+    const commitComparisonData = await this.githubHttpService.request<{ merge_base_commit: { sha: string } }>(
       this.routeService.GITHUB_ROUTES.COMPARE_COMMITS(repositoryOwner, repositoryName, mainBranch, branch),
-      { authorization: req.headers.authorization }
+      { authorization: req.headers.authorization, operation: 'compare commits' }
     )
-    if (!commitComparisonResponse.ok)
-      throw new Error(
-        `Failed to compare commits ${commitComparisonResponse.status} ${commitComparisonResponse.statusText} ${await commitComparisonResponse.text()}`
-      )
-
-    const commitComparisonData = (await commitComparisonResponse.json()) as { merge_base_commit: { sha: string } }
 
     const files = await Promise.all(
-      filePaths.map(async ({ original, translated, name, category, pathsInGameFolder }) => {
-        const originalFileResponse = await this.githubHttpService.fetch(
+      translationFiles.all().map(async ({ original, translated, name, category, pathsInGameFolder }) => {
+        const originalFile = await this.githubHttpService.request<{ download_url: string }>(
           this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, original) +
             `?ref=${commitComparisonData.merge_base_commit.sha}`,
-          { authorization: req.headers.authorization }
+          { authorization: req.headers.authorization, operation: 'read original file' }
         )
 
-        if (!originalFileResponse.ok)
-          throw new Error(
-            `Failed to read original file ${originalFileResponse.status} ${originalFileResponse.statusText} ${await originalFileResponse.text()}`
-          )
-
-        const originalFile = (await originalFileResponse.json()) as { download_url: string }
-
-        const translatedFileResponse = await this.githubHttpService.fetch(
+        const translatedFile = await this.githubHttpService.request<{ download_url: string }>(
           this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, translated) +
             `?ref=${commitComparisonData.merge_base_commit.sha}`,
-          { authorization: req.headers.authorization }
+          { authorization: req.headers.authorization, operation: 'read translated file' }
         )
-
-        if (!translatedFileResponse.ok)
-          throw new Error(
-            `Failed to read translated file ${translatedFileResponse.status} ${translatedFileResponse.statusText} ${await translatedFileResponse.text()}`
-          )
-
-        const translatedFile = (await translatedFileResponse.json()) as { download_url: string }
 
         return {
           category,
@@ -480,49 +234,31 @@ export class TranslationController {
 
   @Post('/files')
   public async saveFiles(@Req() req: Request, @Body() body: SaveFilesBodyDto) {
-    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
-    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
+    const { owner: repositoryOwner, name: repositoryName } = this.repositoryContext
 
-    const refResponse = await this.githubHttpService.fetch(
+    const refData = await this.githubHttpService.request<{ object: { sha: string } }>(
       this.routeService.GITHUB_ROUTES.GET_BRANCH(repositoryOwner, repositoryName, body.branch),
-      { authorization: req.headers.authorization }
+      { authorization: req.headers.authorization, operation: 'get ref' }
     )
-
-    if (!refResponse.ok)
-      throw new Error(`Failed to get ref ${refResponse.status} ${refResponse.statusText} ${await refResponse.text()}`)
-
-    const refData = (await refResponse.json()) as { object: { sha: string } }
     const commitSha = refData.object.sha
 
-    const treeShaResponse = await this.githubHttpService.fetch(
+    const commitData = await this.githubHttpService.request<{ tree: { sha: string } }>(
       this.routeService.GITHUB_ROUTES.TREE_SHA(repositoryOwner, repositoryName, commitSha),
-      { authorization: req.headers.authorization }
+      { authorization: req.headers.authorization, operation: 'get tree sha' }
     )
-
-    if (!treeShaResponse.ok)
-      throw new Error(
-        `Failed to get tree sha ${treeShaResponse.status} ${treeShaResponse.statusText} ${await treeShaResponse.text()}`
-      )
-
-    const commitData = (await treeShaResponse.json()) as { tree: { sha: string } }
     const baseTreeSha = commitData.tree.sha
 
     const blobsPromises = body.files.map(async (file) => {
-      const blobResponse = await this.githubHttpService.fetch(
+      const blobData = await this.githubHttpService.request<{ sha: string }>(
         this.routeService.GITHUB_ROUTES.CREATE_BLOB(repositoryOwner, repositoryName),
         {
           method: 'POST',
           authorization: req.headers.authorization,
-          body: { content: file.content, encoding: 'utf-8' }
+          body: { content: file.content, encoding: 'utf-8' },
+          operation: 'create blob'
         }
       )
 
-      if (!blobResponse.ok)
-        throw new Error(
-          `Failed to create blob ${blobResponse.status} ${blobResponse.statusText} ${await blobResponse.text()}`
-        )
-
-      const blobData = (await blobResponse.json()) as { sha: string }
       return {
         path: file.path,
         mode: '100644',
@@ -533,47 +269,35 @@ export class TranslationController {
 
     const blobs = await Promise.all(blobsPromises)
 
-    const newTreeResponse = await this.githubHttpService.fetch(
+    const newTreeData = await this.githubHttpService.request<{ sha: string }>(
       this.routeService.GITHUB_ROUTES.CREATE_TREE(repositoryOwner, repositoryName),
       {
         method: 'POST',
         authorization: req.headers.authorization,
-        body: { base_tree: baseTreeSha, tree: blobs }
+        body: { base_tree: baseTreeSha, tree: blobs },
+        operation: 'create tree'
       }
     )
-    if (!newTreeResponse.ok)
-      throw new Error(
-        `Failed to create tree ${newTreeResponse.status} ${newTreeResponse.statusText} ${await newTreeResponse.text()}`
-      )
-    const newTreeData = (await newTreeResponse.json()) as { sha: string }
 
-    const newCommitResponse = await this.githubHttpService.fetch(
+    const newCommitData = await this.githubHttpService.request<{ sha: string }>(
       this.routeService.GITHUB_ROUTES.CREATE_COMMIT(repositoryOwner, repositoryName),
       {
         method: 'POST',
         authorization: req.headers.authorization,
-        body: { message: body.message, tree: newTreeData.sha, parents: [commitSha] }
+        body: { message: body.message, tree: newTreeData.sha, parents: [commitSha] },
+        operation: 'create commit'
       }
     )
-    if (!newCommitResponse.ok)
-      throw new Error(
-        `Failed to create commit ${newCommitResponse.status} ${newCommitResponse.statusText} ${await newCommitResponse.text()}`
-      )
-    const newCommitData = (await newCommitResponse.json()) as { sha: string }
 
-    const updateBranchHeadResponse = await this.githubHttpService.fetch(
+    await this.githubHttpService.request(
       this.routeService.GITHUB_ROUTES.UPDATE_BRANCH_HEAD(repositoryOwner, repositoryName, body.branch),
       {
         method: 'PATCH',
         authorization: req.headers.authorization,
-        body: { sha: newCommitData.sha }
+        body: { sha: newCommitData.sha },
+        operation: 'update branch head'
       }
     )
-
-    if (!updateBranchHeadResponse.ok)
-      throw new Error(
-        `Failed to update branch head ${updateBranchHeadResponse.status} ${updateBranchHeadResponse.statusText} ${await updateBranchHeadResponse.text()}`
-      )
 
     await this.cacheManager.del(CACHE_KEYS.FILES(body.branch))
 
@@ -582,182 +306,92 @@ export class TranslationController {
 
   @Post('/submit-to-review')
   async review(@Req() req: Request, @Body() body: SubmitToCorrectionDto) {
-    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
-    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
-    const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
+    const { owner: repositoryOwner, name: repositoryName } = this.repositoryContext
     const wipLabel = this.configService.getOrThrow('TRANSLATION_WIP_LABEL_NAME', { infer: true })
 
-    const pullRequests = await this.githubHttpService.cachedGet<
-      {
-        number: number
-        base: { ref: string }
-        head: { ref: string }
-        labels: { name: string }[]
-        body: string
-      }[]
-    >(
-      this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-        `?head=${body.branch}&base=${mainBranch}&sort=updated&direction=desc&per_page=100`,
-      { authorization: req.headers.authorization }
-    )
-
-    const pullRequest = pullRequests.find((pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch)
-    const pullRequestNumber = pullRequest?.number
-    if (!pullRequestNumber) {
-      throw new Error(`No pull request found for branch ${body.branch} with base ${mainBranch}`)
-    }
+    const pullRequest = await this.pullRequestsService.forBranch(body.branch, {
+      authorization: req.headers.authorization
+    })
+    const pullRequestNumber = pullRequest.number
 
     const hasWipLabel = pullRequest.labels.some((label) => label.name === wipLabel)
 
     if (hasWipLabel) {
-      const deleteLabelResponse = await this.githubHttpService.fetch(
+      await this.githubHttpService.request(
         this.routeService.GITHUB_ROUTES.DELETE_LABEL(repositoryOwner, repositoryName, pullRequestNumber, wipLabel),
-        { method: 'DELETE', authorization: req.headers.authorization }
+        { method: 'DELETE', authorization: req.headers.authorization, operation: 'delete label from PR' }
       )
-
-      if (!deleteLabelResponse.ok)
-        throw new Error(
-          `Failed to delete label from PR ${deleteLabelResponse.status} ${deleteLabelResponse.statusText} ${await deleteLabelResponse.text()}`
-        )
     }
 
-    const pullRequestBody = clearReviewersFromBody('change_requested', pullRequest.body)
+    const pullRequestBody = ReviewSignoffs.clearChangeRequests(pullRequest.body)
 
-    const editPullRequestResponse = await this.githubHttpService.fetch(
+    await this.githubHttpService.request(
       this.routeService.GITHUB_ROUTES.EDIT_PULL_REQUEST(repositoryOwner, repositoryName, pullRequestNumber),
       {
         method: 'PATCH',
         authorization: req.headers.authorization,
-        body: { body: pullRequestBody, state: 'open' }
+        body: { body: pullRequestBody, state: 'open' },
+        operation: 'edit pull request'
       }
     )
 
-    if (!editPullRequestResponse.ok)
-      throw new Error(
-        `Failed to edit pull request ${editPullRequestResponse.status} ${editPullRequestResponse.statusText} ${await editPullRequestResponse.text()}`
-      )
-
     return { success: true }
   }
 
+  @UseGuards(GithubAuthGuard)
   @Post('/approve')
-  async approveTranslation(@Req() req: Request, @Body() body: { branch: string }) {
-    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
-    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
-    const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
+  async approveTranslation(@Req() req: AuthedRequest, @Body() body: { branch: string }) {
+    const { owner: repositoryOwner, name: repositoryName } = this.repositoryContext
 
-    const pullRequests = await this.githubHttpService.cachedGet<
-      {
-        body: string
-        number: number
-        base: { ref: string }
-        head: { ref: string }
-        labels: { name: string }[]
-      }[]
-    >(
-      this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-        `?head=${body.branch}&base=${mainBranch}&sort=updated&direction=desc&per_page=100`,
-      { authorization: req.headers.authorization }
-    )
-
-    const pullRequest = pullRequests.find((pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch)
-    if (!pullRequest) {
-      throw new Error(`No pull request found for branch ${body.branch} with base ${mainBranch}`)
-    }
-
-    const currentUserResponse = await this.githubHttpService.fetch(this.routeService.GITHUB_ROUTES.AUTHENTICATED_USER, {
+    const pullRequest = await this.pullRequestsService.forBranch(body.branch, {
       authorization: req.headers.authorization
     })
 
-    if (!currentUserResponse.ok)
-      throw new Error(
-        `Failed to get authenticated user ${currentUserResponse.status} ${currentUserResponse.statusText} ${await currentUserResponse.text()}`
-      )
+    const pullRequestBody = ReviewSignoffs.approve(pullRequest.body, req.user.login)
 
-    const currentUser = (await currentUserResponse.json()) as { login: string }
-    let pullRequestBody = addReviewerToBody('approvals', pullRequest.body, currentUser.login)
-    pullRequestBody = removeReviewerFromBody('change_requested', pullRequestBody, currentUser.login)
-
-    const editPullRequestResponse = await this.githubHttpService.fetch(
+    await this.githubHttpService.request(
       this.routeService.GITHUB_ROUTES.EDIT_PULL_REQUEST(repositoryOwner, repositoryName, pullRequest.number),
-      { method: 'PATCH', authorization: req.headers.authorization, body: { body: pullRequestBody, state: 'open' } }
+      {
+        method: 'PATCH',
+        authorization: req.headers.authorization,
+        body: { body: pullRequestBody, state: 'open' },
+        operation: 'edit pull request'
+      }
     )
-
-    if (!editPullRequestResponse.ok)
-      throw new Error(
-        `Failed to edit pull request ${editPullRequestResponse.status} ${editPullRequestResponse.statusText} ${await editPullRequestResponse.text()}`
-      )
 
     return { success: true }
   }
 
+  @UseGuards(GithubAuthGuard)
   @Post('/mark-as-reviewed')
-  async markAsReviewed(@Req() req: Request, @Body() body: { branch: string }) {
-    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
-    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
-    const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
+  async markAsReviewed(@Req() req: AuthedRequest, @Body() body: { branch: string }) {
+    const { owner: repositoryOwner, name: repositoryName } = this.repositoryContext
 
-    const pullRequests = await this.githubHttpService.cachedGet<
-      {
-        number: number
-        base: { ref: string }
-        head: { ref: string }
-        body: string
-      }[]
-    >(
-      this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-        `?head=${body.branch}&base=${mainBranch}&sort=updated&direction=desc&per_page=100`,
-      { authorization: req.headers.authorization }
-    )
-
-    const pullRequest = pullRequests.find((pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch)
-    if (!pullRequest) {
-      throw new Error(`No pull request found for branch ${body.branch} with base ${mainBranch}`)
-    }
-
-    const currentUserResponse = await this.githubHttpService.fetch(this.routeService.GITHUB_ROUTES.AUTHENTICATED_USER, {
+    const pullRequest = await this.pullRequestsService.forBranch(body.branch, {
       authorization: req.headers.authorization
     })
-    if (!currentUserResponse.ok)
-      throw new Error(
-        `Failed to get authenticated user ${currentUserResponse.status} ${currentUserResponse.statusText} ${await currentUserResponse.text()}`
-      )
-    const currentUser = (await currentUserResponse.json()) as { login: string }
 
-    let pullRequestBody = addReviewerToBody('change_requested', pullRequest.body, currentUser.login)
-    pullRequestBody = removeReviewerFromBody('approvals', pullRequestBody, currentUser.login)
+    const pullRequestBody = ReviewSignoffs.requestChanges(pullRequest.body, req.user.login)
 
-    const editPullRequestResponse = await this.githubHttpService.fetch(
+    await this.githubHttpService.request(
       this.routeService.GITHUB_ROUTES.EDIT_PULL_REQUEST(repositoryOwner, repositoryName, pullRequest.number),
-      { method: 'PATCH', authorization: req.headers.authorization, body: { body: pullRequestBody, state: 'open' } }
+      {
+        method: 'PATCH',
+        authorization: req.headers.authorization,
+        body: { body: pullRequestBody, state: 'open' },
+        operation: 'edit pull request'
+      }
     )
-
-    if (!editPullRequestResponse.ok)
-      throw new Error(
-        `Failed to edit pull request ${editPullRequestResponse.status} ${editPullRequestResponse.statusText} ${await editPullRequestResponse.text()}`
-      )
 
     return { success: true }
   }
 
   @Get('/comments')
   async getComments(@Req() req: Request, @Query('branch') branch: string) {
-    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
-    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
-    const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
+    const { owner: repositoryOwner, name: repositoryName } = this.repositoryContext
 
-    const pullRequests = await this.githubHttpService.cachedGet<
-      { number: number; base: { ref: string }; head: { ref: string } }[]
-    >(
-      this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-        `?head=${branch}&base=${mainBranch}&sort=updated&direction=desc&per_page=100`,
-      { authorization: req.headers.authorization }
-    )
-
-    const pullRequestNumber = pullRequests.find((pr) => pr.head.ref === branch && pr.base.ref === mainBranch)?.number
-    if (!pullRequestNumber) {
-      throw new Error(`No pull request found for branch ${branch} with base ${mainBranch}`)
-    }
+    const pullRequest = await this.pullRequestsService.forBranch(branch, { authorization: req.headers.authorization })
+    const pullRequestNumber = pullRequest.number
 
     const cachedComments = await this.cacheManager.get(CACHE_KEYS.COMMENTS(pullRequestNumber))
     Logger.log(`Cached comments for pull request ${pullRequestNumber}:`, !!cachedComments)
@@ -769,6 +403,8 @@ export class TranslationController {
     let comments: { original_line?: number }[] = []
     const maxIter = 5
 
+    // Stays on `fetch` (not `request`): pagination needs the raw `Link` response header to decide
+    // whether another page exists, which `request` (body-only) does not surface.
     for (let i = 0; i < maxIter; i++) {
       const commentsResponse = await this.githubHttpService.fetch(
         this.routeService.GITHUB_ROUTES.LIST_COMMENTS(repositoryOwner, repositoryName, pullRequestNumber) +
@@ -804,77 +440,59 @@ export class TranslationController {
     @Req() req: Request,
     @Body() body: { branch: string; body: string; line: number; filePath: string; inReplyTo?: number }
   ) {
-    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
-    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
-    const mainBranch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
+    const { owner: repositoryOwner, name: repositoryName } = this.repositoryContext
 
-    const pullRequests = await this.githubHttpService.cachedGet<
-      { number: number; base: { ref: string }; head: { ref: string } }[]
-    >(
-      this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-        `?head=${body.branch}&base=${mainBranch}&sort=updated&direction=desc&per_page=100`,
-      { authorization: req.headers.authorization }
-    )
+    const pullRequest = await this.pullRequestsService.forBranch(body.branch, {
+      authorization: req.headers.authorization
+    })
+    const pullRequestNumber = pullRequest.number
 
-    const pullRequestNumber = pullRequests.find(
-      (pr) => pr.head.ref === body.branch && pr.base.ref === mainBranch
-    )?.number
-    if (!pullRequestNumber) {
-      throw new Error(`No pull request found for branch ${body.branch} with base ${mainBranch}`)
-    }
-
-    const lastCommitResponse = await this.githubHttpService.fetch(
+    const lastCommit = await this.githubHttpService.request<{ sha: string }>(
       this.routeService.GITHUB_ROUTES.COMMITS(repositoryOwner, repositoryName, body.branch),
-      { authorization: req.headers.authorization }
+      { authorization: req.headers.authorization, operation: 'retrieve last commit' }
     )
 
-    if (!lastCommitResponse.ok)
-      throw new Error(`Failed to retrieve last commit ${lastCommitResponse.status} ${lastCommitResponse.statusText}`)
-
-    const lastCommit = (await lastCommitResponse.json()) as { sha: string }
-
-    const commentResponse = body.inReplyTo
-      ? await this.githubHttpService.fetch(
-          this.routeService.GITHUB_ROUTES.ADD_COMMENT(repositoryOwner, repositoryName, pullRequestNumber),
-          {
-            method: 'POST',
-            authorization: req.headers.authorization,
-            body: {
-              body: body.body,
-              commit_id: lastCommit.sha,
-              path: body.filePath,
-              side: 'RIGHT',
-              line: body.line,
-              subject_type: 'line',
-              in_reply_to: body.inReplyTo
-            }
-          }
-        )
-      : await this.githubHttpService.fetch(
-          this.routeService.GITHUB_ROUTES.REVIEW_PULL_REQUEST(repositoryOwner, repositoryName, pullRequestNumber),
-          {
-            method: 'POST',
-            authorization: req.headers.authorization,
-            body: {
-              event: 'COMMENT',
-              body: '',
-              commit_id: lastCommit.sha,
-              comments: [
-                {
-                  path: body.filePath,
-                  body: body.body,
-                  line: body.line,
-                  side: 'RIGHT'
-                }
-              ]
-            }
-          }
-        )
-
-    if (!commentResponse.ok)
-      throw new Error(
-        `Failed to post comment ${commentResponse.status} ${commentResponse.statusText} ${await commentResponse.text()}`
+    if (body.inReplyTo) {
+      await this.githubHttpService.request(
+        this.routeService.GITHUB_ROUTES.ADD_COMMENT(repositoryOwner, repositoryName, pullRequestNumber),
+        {
+          method: 'POST',
+          authorization: req.headers.authorization,
+          body: {
+            body: body.body,
+            commit_id: lastCommit.sha,
+            path: body.filePath,
+            side: 'RIGHT',
+            line: body.line,
+            subject_type: 'line',
+            in_reply_to: body.inReplyTo
+          },
+          operation: 'post comment'
+        }
       )
+    } else {
+      await this.githubHttpService.request(
+        this.routeService.GITHUB_ROUTES.REVIEW_PULL_REQUEST(repositoryOwner, repositoryName, pullRequestNumber),
+        {
+          method: 'POST',
+          authorization: req.headers.authorization,
+          body: {
+            event: 'COMMENT',
+            body: '',
+            commit_id: lastCommit.sha,
+            comments: [
+              {
+                path: body.filePath,
+                body: body.body,
+                line: body.line,
+                side: 'RIGHT'
+              }
+            ]
+          },
+          operation: 'post comment'
+        }
+      )
+    }
 
     await this.cacheManager.del(CACHE_KEYS.COMMENTS(pullRequestNumber))
 
@@ -887,24 +505,17 @@ export class TranslationController {
     @Query('commentId') commentId: string,
     @Query('pullRequestNumber') pullRequestNumber: string
   ) {
-    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
-    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
+    const { owner: repositoryOwner, name: repositoryName } = this.repositoryContext
 
     const pullRequestNumberInt = parseInt(pullRequestNumber, 10)
     if (isNaN(pullRequestNumberInt)) {
       throw new Error(`Invalid pull request number: ${pullRequestNumber}`)
     }
 
-    const response = await this.githubHttpService.fetch(
+    await this.githubHttpService.request(
       `${this.routeService.GITHUB_ROUTES.DELETE_COMMENT(repositoryOwner, repositoryName, parseInt(commentId, 10))}`,
-      {
-        method: 'DELETE',
-        authorization: req.headers.authorization
-      }
+      { method: 'DELETE', authorization: req.headers.authorization, operation: 'delete comment' }
     )
-
-    if (!response.ok)
-      throw new Error(`Failed to delete comment ${response.status} ${response.statusText} ${await response.text()}`)
 
     await this.cacheManager.del(CACHE_KEYS.COMMENTS(pullRequestNumberInt))
 
@@ -912,135 +523,7 @@ export class TranslationController {
   }
 
   @Get('/progression')
-  async getProgression() {
-    const cachedProgression = await this.cacheManager.get(CACHE_KEYS.PROGRESSION)
-    if (cachedProgression) {
-      Logger.log('Returning cached progression')
-      return cachedProgression
-    }
-
-    Logger.log('No cached progression found, computing it...')
-    await this.computeProgression()
-    return this.cacheManager.get(CACHE_KEYS.PROGRESSION)
-  }
-
-  @Interval(12 * 60 * 60 * 1000)
-  async computeProgression() {
-    console.log('Computing progression...')
-    const repositoryOwner = this.configService.getOrThrow('REPOSITORY_OWNER', { infer: true })
-    const repositoryName = this.configService.getOrThrow('REPOSITORY_NAME', { infer: true })
-    const branch = this.configService.getOrThrow('REPOSITORY_MAIN_BRANCH', { infer: true })
-    const token = this.configService.getOrThrow('GITHUB_API_ACCESS_TOKEN', { infer: true })
-
-    const files = await Promise.all(
-      filePaths
-        .filter((f) => f.name === 'Strings du chapitre 4')
-        .map(async ({ original, translated, name }) => {
-          const originalFileResponse = await this.githubHttpService.fetch(
-            this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, original) + `?ref=${branch}`,
-            { authorization: `Bearer ${token}` }
-          )
-
-          if (!originalFileResponse.ok)
-            throw new Error(
-              `Failed to read original file ${originalFileResponse.status} ${originalFileResponse.statusText} ${await originalFileResponse.text()}`
-            )
-
-          const originalFile = (await originalFileResponse.json()) as { download_url: string }
-
-          const translatedFileResponse = await this.githubHttpService.fetch(
-            this.routeService.GITHUB_ROUTES.READ_FILE(repositoryOwner, repositoryName, translated) + `?ref=${branch}`,
-            { authorization: `Bearer ${token}` }
-          )
-
-          if (!translatedFileResponse.ok)
-            throw new Error(
-              `Failed to read translated file ${translatedFileResponse.status} ${translatedFileResponse.statusText} ${await translatedFileResponse.text()}`
-            )
-
-          const translatedFile = (await translatedFileResponse.json()) as { download_url: string }
-
-          return {
-            name,
-            original: originalFile.download_url,
-            translated: translatedFile.download_url
-          }
-        })
-    )
-
-    const progressions = await Promise.all(
-      files.map(async (file) => {
-        const originalResponse = await fetch(file.original)
-        if (!originalResponse.ok) {
-          throw new Error(`Failed to fetch original file: ${originalResponse.status} ${originalResponse.statusText}`)
-        }
-
-        const translatedResponse = await fetch(file.translated)
-        if (!translatedResponse.ok) {
-          throw new Error(
-            `Failed to fetch translated file: ${translatedResponse.status} ${translatedResponse.statusText}`
-          )
-        }
-
-        const originalText = (await originalResponse.text()).replaceAll('\r', '')
-        const translatedText = (await translatedResponse.text()).replaceAll('\r', '')
-
-        const originalLines = originalText.split('\n')
-        const translatedLines = translatedText.split('\n')
-
-        let translatedLineCount = 0
-        let totalTranslatableLineCount = 0
-
-        for (let i = 0; i < originalLines.length; i++) {
-          const originalLine = originalLines[i]
-          const translatedLine = translatedLines[i]
-
-          if (originalLine.length < 20 || isTechnicalString(originalLine)) continue
-
-          if (originalLine !== translatedLine) {
-            translatedLineCount++
-          }
-
-          totalTranslatableLineCount++
-        }
-
-        const relevantTranslatedLines = translatedLineCount - automaticallyTranslatedLines[file.name] || 0
-        const relevantTotalLinesToTranslate = totalTranslatableLineCount - automaticallyTranslatedLines[file.name] || 0
-
-        const progression = Math.round((relevantTranslatedLines / relevantTotalLinesToTranslate) * 100 * 1.15)
-
-        Logger.log(
-          `Progression computed: ${progression}% (${relevantTranslatedLines}/${relevantTotalLinesToTranslate})`
-        )
-
-        return {
-          name: file.name,
-          progression: progression,
-          translatedLineCount: relevantTranslatedLines,
-          totalLinesToTranslate: relevantTotalLinesToTranslate
-        }
-      })
-    )
-
-    await this.cacheManager.set(CACHE_KEYS.PROGRESSION, {
-      chapter3: {
-        bible: 100,
-        texts: 100,
-        textures: 100,
-        audio: 100,
-        test: 100
-      },
-      chapter4: {
-        bible: 100,
-        texts: 100,
-        textures: 100,
-        audio: 90,
-        test: 97
-      }
-    })
-  }
-
-  async onModuleInit() {
-    await this.computeProgression()
+  getProgression() {
+    return this.progressionService.getProgression()
   }
 }

@@ -3,8 +3,8 @@ import { ConfigService } from '@nestjs/config'
 import { Expose, plainToInstance } from 'class-transformer'
 import { IsNumber, IsString } from 'class-validator'
 import { Request } from 'express'
-import { EnvironmentVariables } from 'src/env'
-import { RoutesService } from 'src/routes/routes.service'
+import { EnvironmentVariables } from '@/env'
+import { RoutesService } from '@/routes/routes.service'
 
 export class ConfirmAuthQueryDto {
   @IsString()

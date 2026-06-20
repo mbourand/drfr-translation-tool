@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager'
-import { CACHE_KEYS } from 'src/cache/cache.constants'
+import { CACHE_KEYS } from '@/cache/cache.constants'
 
 type ConditionalEntry<T> = { etag: string; body: T }
 
@@ -14,6 +14,30 @@ export class GithubHttpService {
 
   constructor(@Inject(CACHE_MANAGER) private readonly cacheManager: Cache) {}
 
+  /**
+   * GET the raw bytes of a repository file (via the GitHub contents API with the `raw` media type)
+   * and return them as a string. Used by the Beta QA read path to fetch `beta`-branch file content.
+   */
+  public async getRawFile(url: string, options?: { authorization?: string }): Promise<string> {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/vnd.github.raw',
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(options?.authorization ? { Authorization: options.authorization } : {})
+      }
+    })
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '<unreadable>')
+      throw new Error(
+        `GitHub raw file request failed: ${response.status} ${response.statusText} ${url} :: ${errorBody}`
+      )
+    }
+
+    return await response.text()
+  }
+
   public async fetch(url: string, options?: { authorization?: string; body?: Record<string, any>; method?: string }) {
     const response = await fetch(url, {
       method: options?.method || 'GET',
@@ -26,6 +50,34 @@ export class GithubHttpService {
     })
 
     return response
+  }
+
+  /**
+   * Make a GitHub request and own its outcome: throw a diagnostic error on a non-2xx response,
+   * otherwise return the parsed JSON body. This absorbs the `if (!res.ok) throw …` + `res.json()`
+   * boilerplate that every write/read call site used to repeat.
+   *
+   * Pass `operation` (a short label like `'create branch'`) so the thrown message stays specific to
+   * the failing step — the error carries operation + status + url + response body, never flattened.
+   *
+   * An empty response body (e.g. a `204 No Content` from a delete) resolves to `undefined`; type it
+   * with `request<void>(…)` at those call sites. Callers that need response headers (pagination's
+   * `Link`) or want to branch on the status themselves should use `fetch` directly.
+   */
+  public async request<T = unknown>(
+    url: string,
+    options?: { authorization?: string; body?: Record<string, any>; method?: string; operation?: string }
+  ): Promise<T> {
+    const response = await this.fetch(url, options)
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '<unreadable>')
+      const operation = options?.operation ?? 'GitHub request'
+      throw new Error(`${operation} failed: ${response.status} ${response.statusText} ${url} :: ${errorBody}`)
+    }
+
+    const body = await response.text()
+    return (body ? JSON.parse(body) : undefined) as T
   }
 
   /**
