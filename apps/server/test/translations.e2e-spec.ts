@@ -49,6 +49,8 @@ describe('Translations QA (e2e)', () => {
     ]),
     // Every mutation (edit PR, delete label) goes through request(); we capture its calls.
     request: jest.fn<Promise<unknown>, [string, { body?: { body?: unknown } }?]>(async () => ({})),
+    // Mutating endpoints drop the PR-list cache after writing; a no-op here is enough.
+    invalidateCachedGet: jest.fn(async () => {}),
     // Defensive: nothing should hit the network on boot, but keep it offline if it does.
     fetch: jest.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }))
   }

@@ -75,22 +75,7 @@ export class TranslationController {
 
   @Get('/list')
   async getAllTranslations(@Req() req: Request) {
-    const { owner: repositoryOwner, name: repositoryName, mainBranch } = this.repositoryContext
-
-    const [pullRequestsOpen, pullRequestsClosed] = await Promise.all([
-      this.githubHttpService.cachedGet<unknown[]>(
-        this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-          `?base=${mainBranch}&state=open&sort=updated&direction=desc&per_page=100`,
-        { authorization: req.headers.authorization }
-      ),
-      this.githubHttpService.cachedGet<unknown[]>(
-        this.routeService.GITHUB_ROUTES.LIST_PULL_REQUESTS(repositoryOwner, repositoryName) +
-          `?base=${mainBranch}&state=closed&sort=created&direction=desc&per_page=50`,
-        { authorization: req.headers.authorization }
-      )
-    ])
-
-    return [...pullRequestsOpen, ...pullRequestsClosed]
+    return this.pullRequestsService.list({ authorization: req.headers.authorization })
   }
 
   @Post('/')
@@ -164,6 +149,9 @@ export class TranslationController {
         operation: 'add label to PR'
       }
     )
+
+    // Drop the stale PR-list cache so the freshly-created translation shows up immediately.
+    await this.pullRequestsService.invalidate(head)
 
     return pullRequest
   }
@@ -351,6 +339,8 @@ export class TranslationController {
       }
     )
 
+    await this.pullRequestsService.invalidate(body.branch)
+
     return { success: true }
   }
 
@@ -375,6 +365,8 @@ export class TranslationController {
       }
     )
 
+    await this.pullRequestsService.invalidate(body.branch)
+
     return { success: true }
   }
 
@@ -398,6 +390,8 @@ export class TranslationController {
         operation: 'edit pull request'
       }
     )
+
+    await this.pullRequestsService.invalidate(body.branch)
 
     return { success: true }
   }
@@ -427,6 +421,8 @@ export class TranslationController {
       }
     )
 
+    await this.pullRequestsService.invalidate(body.branch)
+
     return { success: true }
   }
 
@@ -454,6 +450,8 @@ export class TranslationController {
         operation: 'edit pull request'
       }
     )
+
+    await this.pullRequestsService.invalidate(body.branch)
 
     return { success: true }
   }
