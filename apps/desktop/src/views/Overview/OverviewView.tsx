@@ -52,6 +52,8 @@ const mapPRToTranslation = (pr: TranslationType, isYours: boolean) => {
     authorAvatar: pr.user.avatar_url,
     approvals,
     requestedChanges,
+    qaApprovals: reviewSignoffs.qaApprovals(pr.body),
+    qaChangeRequests: reviewSignoffs.qaChangeRequests(pr.body),
     href:
       pr.labels.some((label) => label.name === WIP_LABEL) && pr.state === 'open' && isYours
         ? TRANSLATION_APP_PAGES.TRANSLATION.EDIT(pr.head.ref.toString(), pr.title.toString())
