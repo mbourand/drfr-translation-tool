@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { GridApi } from 'ag-grid-community'
 import { useTranslationFiles } from '../../../hooks/useTranslationFiles'
 import { useTranslationView } from '../../../hooks/useTranslationView'
@@ -12,7 +12,11 @@ import { DialogVisualizer } from '../../../components/DialogVisualizer/DialogVis
 import { ReviewStringSearch } from '../review/ReviewStringSearch'
 import { isRowVisible } from '../isCellVisible'
 import { useBetaReviewMarks } from '../../../hooks/useBetaReviewMarks'
+import { LaunchGameButton } from '../edit/SidePanel/LaunchGameButton'
 import { BetaQaGrid } from './BetaQaGrid'
+import { ReviewDepthDistribution } from './ReviewDepthDistribution'
+
+const NO_CHANGES = new Map<string, string>()
 
 export const BetaQaView = () => {
   const {
@@ -37,6 +41,18 @@ export const BetaQaView = () => {
 
   const { countsByLine, toggleMark } = useBetaReviewMarks(selectedFile?.translatedPath, filteredLines)
 
+  // The launcher patches from in-memory content, so the `beta` snapshot is launched read-only:
+  // each file's VF as fetched, no changes (PRD #5). Reuses the edit view's launch flow unchanged.
+  const launchFiles = useMemo(
+    () =>
+      (betaTranslationFiles ?? []).map((file) => ({
+        pathsInGameFolder: file.pathsInGameFolder,
+        content: file.lines.map((line) => line.translated).join('\n'),
+        pathInGitFolder: file.translatedPath
+      })),
+    [betaTranslationFiles]
+  )
+
   return (
     <div className="flex flex-row">
       <TranslationSidePanel
@@ -44,6 +60,7 @@ export const BetaQaView = () => {
         categories={filesByCategory}
         onSelected={setSelectedFile}
         selected={selectedFile}
+        footer={<LaunchGameButton files={launchFiles} changes={NO_CHANGES} />}
       />
       <div className="flex flex-col items-center w-full px-4">
         <div className="flex flex-row w-full items-center mb-4 pt-2">
@@ -69,6 +86,7 @@ export const BetaQaView = () => {
             onMatchLanguageChanged={setMatchLanguage}
           />
         )}
+        {filteredLines && selectedFileContents && selectedFile && <ReviewDepthDistribution counts={countsByLine} />}
         {filteredLines && selectedFileContents && selectedFile && (
           <div className="w-full h-full pb-4 flex flex-row justify-center">
             <BetaQaGrid
