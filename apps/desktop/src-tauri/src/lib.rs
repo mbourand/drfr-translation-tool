@@ -3,6 +3,64 @@
 use std::io::{Cursor, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use tauri_plugin_opener::OpenerExt;
+
+/// Deltarune's Steam app id (covers both the demo and the full release). Used to launch the
+/// Steam/Proton build on Linux via a `steam://` URL.
+const DELTARUNE_STEAM_APP_ID: &str = "1671210";
+
+/// What "launch the game" means on the host OS. Windows (and macOS, left unchanged) spawn the
+/// Windows executable directly; Linux runs the Steam/Proton build by handing a `steam://` URL to
+/// Steam, which sets up the Proton prefix/runtime itself (a Windows binary can't be spawned there).
+#[derive(Debug, PartialEq, Eq)]
+enum LaunchAction {
+    RunExecutable(String),
+    OpenSteamUrl(String),
+}
+
+/// Pure decision: map the host OS + Game folder to a launch action. Kept free of side effects so
+/// the per-OS branching is unit-testable on any host (the OS is passed in, not read from `env`).
+fn launch_action(os: &str, game_folder_path: &str) -> LaunchAction {
+    match os {
+        "linux" => LaunchAction::OpenSteamUrl(format!("steam://rungameid/{}", DELTARUNE_STEAM_APP_ID)),
+        _ => LaunchAction::RunExecutable(format!("{}/DELTARUNE.exe", game_folder_path)),
+    }
+}
+
+/// Pure decision: the UTMT CLI binary path inside the user-selected folder. The native Linux build
+/// has no extension; Windows (and macOS, left unchanged) use `UndertaleModCli.exe`.
+fn utmt_program_path(os: &str, utmt_cli_folder_path: &str) -> String {
+    match os {
+        "linux" => format!("{}/UndertaleModCli", utmt_cli_folder_path),
+        _ => format!("{}/UndertaleModCli.exe", utmt_cli_folder_path),
+    }
+}
+
+/// Pure decision: whether the UTMT CLI's executable bit must be ensured before spawning. Only the
+/// native Linux build needs it — a CLI freshly unzipped via a file manager may not be executable,
+/// which would otherwise fail with an opaque "permission denied".
+fn utmt_needs_exec_bit(os: &str) -> bool {
+    os == "linux"
+}
+
+/// Set mode 0755 on the UTMT CLI binary so a freshly-extracted CLI runs without a manual `chmod`.
+#[cfg(unix)]
+fn ensure_executable(path: &str) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    let mut permissions = std::fs::metadata(path)
+        .map_err(|e| format!("Failed to read metadata for {}: {}", path, e))?
+        .permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(path, permissions)
+        .map_err(|e| format!("Failed to set executable bit on {}: {}", path, e))
+}
+
+/// No-op on non-Unix hosts: `utmt_needs_exec_bit` is only ever true on Linux, so this is never
+/// reached on Windows — it exists solely so the crate compiles on the Windows dev host.
+#[cfg(not(unix))]
+fn ensure_executable(_path: &str) -> Result<(), String> {
+    Ok(())
+}
 
 #[tauri::command]
 async fn import_strings(
@@ -17,7 +75,11 @@ async fn import_strings(
         "{}/Script/UMT/DRFR/ImporterToutTranslationTool.csx",
         git_root_folder_path
     );
-    let utmt_cli_exe_path = format!("{}/UndertaleModCli.exe", utmt_cli_folder_path);
+    let utmt_cli_program_path = utmt_program_path(std::env::consts::OS, utmt_cli_folder_path);
+
+    if utmt_needs_exec_bit(std::env::consts::OS) {
+        ensure_executable(&utmt_cli_program_path)?;
+    }
 
     let debug_mode_script_path = format!(
         "{}/Script/UMT/DRFR/Mode Debug (Chapitre {}).csx",
@@ -39,7 +101,7 @@ async fn import_strings(
         );
     }
 
-    let mut utmt_command = Command::new(utmt_cli_exe_path)
+    let mut utmt_command = Command::new(utmt_cli_program_path)
         .args([
             "load",
             &source_data_win_path,
@@ -82,13 +144,20 @@ async fn import_strings(
 }
 
 #[tauri::command]
-async fn run_game_executable(game_folder_path: &str) -> Result<(), String> {
-    let executable_path = format!("{}/DELTARUNE.exe", game_folder_path);
-    std::process::Command::new(executable_path)
-        .current_dir(game_folder_path)
-        .spawn()
-        .map_err(|e| format!("Failed to start the game executable: {}", e))
-        .map(|_| ())
+async fn run_game_executable(app: tauri::AppHandle, game_folder_path: &str) -> Result<(), String> {
+    // Thin shell: decide per-OS, then execute. Windows spawns the binary directly; Linux hands the
+    // game off to Steam, which sets up the Proton prefix/runtime (see launch_action).
+    match launch_action(std::env::consts::OS, game_folder_path) {
+        LaunchAction::RunExecutable(executable_path) => Command::new(executable_path)
+            .current_dir(game_folder_path)
+            .spawn()
+            .map_err(|e| format!("Failed to start the game executable: {}", e))
+            .map(|_| ()),
+        LaunchAction::OpenSteamUrl(url) => app
+            .opener()
+            .open_url(url, None::<&str>)
+            .map_err(|e| format!("Failed to launch the game through Steam: {}", e)),
+    }
 }
 
 #[tauri::command]
@@ -159,4 +228,52 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn windows_launches_the_executable_in_the_game_folder() {
+        assert_eq!(
+            launch_action("windows", "C:/Games/Deltarune"),
+            LaunchAction::RunExecutable("C:/Games/Deltarune/DELTARUNE.exe".to_string())
+        );
+    }
+
+    #[test]
+    fn linux_launches_the_game_through_steam() {
+        assert_eq!(
+            launch_action("linux", "/home/user/Deltarune"),
+            LaunchAction::OpenSteamUrl("steam://rungameid/1671210".to_string())
+        );
+    }
+
+    #[test]
+    fn macos_is_left_on_the_windows_executable_launch() {
+        assert_eq!(
+            launch_action("macos", "/Apps/Deltarune"),
+            LaunchAction::RunExecutable("/Apps/Deltarune/DELTARUNE.exe".to_string())
+        );
+    }
+
+    #[test]
+    fn windows_drives_the_exe_utmt_cli() {
+        assert!(utmt_program_path("windows", "C:/utmt").ends_with("UndertaleModCli.exe"));
+    }
+
+    #[test]
+    fn linux_drives_the_extensionless_utmt_cli() {
+        let program = utmt_program_path("linux", "/opt/utmt");
+        assert!(program.ends_with("UndertaleModCli"));
+        assert!(!program.ends_with(".exe"));
+    }
+
+    #[test]
+    fn only_linux_requests_the_utmt_executable_bit() {
+        assert!(utmt_needs_exec_bit("linux"));
+        assert!(!utmt_needs_exec_bit("windows"));
+        assert!(!utmt_needs_exec_bit("macos"));
+    }
 }
