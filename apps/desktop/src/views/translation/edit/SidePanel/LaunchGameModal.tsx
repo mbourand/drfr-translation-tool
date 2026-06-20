@@ -10,6 +10,7 @@ import { ENV } from '../../../../Env'
 import { repairGameFiles } from '../../../../modules/game/repair'
 import { invoke } from '@tauri-apps/api/core'
 import { RUST_COMMANDS } from '../../../../modules/commands/commands'
+import { platform } from '@tauri-apps/plugin-os'
 
 type LaunchGameModalProps = {
   isVisible: boolean
@@ -81,6 +82,11 @@ export const LaunchGameModal = ({ onClose, isVisible, files, changes }: LaunchGa
 
   const [isLoading, setIsLoading] = useState(false)
   const onlyPatchChangedFilesInputRef = useRef<HTMLInputElement>(null)
+
+  // On Linux, Deltarune runs as the Windows build through Steam Proton, so its saves live inside
+  // the Proton prefix rather than a native location. The picker stays manual (like the other three
+  // folders); we only point the translator at the right place. See ADR 0001-linux-support-via-steam-proton.
+  const isLinux = platform() === 'linux'
 
   return (
     <Modal
@@ -247,6 +253,29 @@ export const LaunchGameModal = ({ onClose, isVisible, files, changes }: LaunchGa
           >
             {savesFolder ?? 'Sélectionner un dossier'}
           </button>
+          {isLinux && (
+            <div className="text-sm opacity-70 flex flex-col gap-1">
+              <span>
+                Sous Linux, les sauvegardes se trouvent dans le préfixe Proton, sous{' '}
+                <code className="break-all">
+                  compatdata/1671210/pfx/drive_c/users/steamuser/AppData/Local/DELTARUNE
+                </code>
+                . Le début du chemin dépend de votre installation de Steam :
+              </span>
+              <span>
+                • Steam natif :{' '}
+                <code className="break-all">
+                  ~/.local/share/Steam/steamapps/compatdata/1671210/pfx/drive_c/users/steamuser/AppData/Local/DELTARUNE
+                </code>
+              </span>
+              <span>
+                • Steam Flatpak :{' '}
+                <code className="break-all">
+                  ~/.var/app/com.valvesoftware.Steam/data/Steam/steamapps/compatdata/1671210/pfx/drive_c/users/steamuser/AppData/Local/DELTARUNE
+                </code>
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex flex-col gap-2">
           <label htmlFor="select-save">Sélectionnez la sauvegarde que vous souhaitez utiliser</label>
