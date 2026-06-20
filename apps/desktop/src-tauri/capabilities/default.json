@@ -20,7 +20,10 @@
           "url": "https://deltarune-fr.com/*"
         },
         {
-          "url": "http://localhost:1420"
+          "url": "http://localhost:1420/*"
+        },
+        {
+          "url": "http://localhost:3000/*"
         }
       ]
     },
