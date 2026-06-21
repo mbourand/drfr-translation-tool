@@ -4,9 +4,6 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { store, STORE_KEYS } from '../../../../store/store'
 import { useQuery } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
-import { fetchData } from '../../../../modules/fetching/fetcher'
-import { STATIC_ROUTES } from '../../../../routes/static/routes'
-import { ENV } from '../../../../Env'
 import { repairGameFiles } from '../../../../modules/game/repair'
 import { invoke } from '@tauri-apps/api/core'
 import { RUST_COMMANDS } from '../../../../modules/commands/commands'
@@ -55,26 +52,6 @@ export const LaunchGameModal = ({ onClose, isVisible, files, changes }: LaunchGa
     queryFn: async () => {
       const folder = await store.get<string>(STORE_KEYS.SAVES_FOLDER_PATH)
       return folder ?? null
-    },
-    refetchOnWindowFocus: false,
-    refetchOnMount: false
-  })
-
-  const { data: selectedSaveFiles, refetch: refetchSelectedSaveFiles } = useQuery({
-    queryKey: [STORE_KEYS.LAST_SELECTED_SAVE_NAME],
-    queryFn: async () => {
-      const folder = await store.get<string>(STORE_KEYS.LAST_SELECTED_SAVE_NAME)
-      return folder ?? null
-    },
-    refetchOnWindowFocus: false,
-    refetchOnMount: false
-  })
-
-  const { data: deltaruneSavesIndex } = useQuery({
-    queryKey: ['deltaruneSavesIndex'],
-    queryFn: async () => {
-      const response = await fetchData({ route: STATIC_ROUTES.SAVES.INDEX })
-      return response
     },
     refetchOnWindowFocus: false,
     refetchOnMount: false
@@ -133,9 +110,7 @@ export const LaunchGameModal = ({ onClose, isVisible, files, changes }: LaunchGa
             disabled={!gameFolder || !utmtCliFolder}
             className="float-right btn btn-primary"
             onClick={async () => {
-              if (!gameFolder || !utmtCliFolder || !gitFolder || !savesFolder || !selectedSaveFiles) return
-              const selectedSaveFilesData = deltaruneSavesIndex?.find((save) => save.name === selectedSaveFiles)
-              if (!selectedSaveFilesData) return
+              if (!gameFolder || !utmtCliFolder || !gitFolder || !savesFolder) return
 
               const changesArray = Array.from(changes.entries())
 
@@ -149,10 +124,6 @@ export const LaunchGameModal = ({ onClose, isVisible, files, changes }: LaunchGa
                 utmtCliFolder,
                 gitFolder,
                 savesFolder,
-                savesFiles: selectedSaveFilesData.files.map((file) => ({
-                  name: file,
-                  url: ENV.DRFR_WEBSITE_URL + '/translation-tool/saves/' + selectedSaveFilesData.path + '/' + file
-                })),
                 files: filesToPatch
               })
               setIsLoading(false)
@@ -276,24 +247,6 @@ export const LaunchGameModal = ({ onClose, isVisible, files, changes }: LaunchGa
               </span>
             </div>
           )}
-        </div>
-        <div className="flex flex-col gap-2">
-          <label htmlFor="select-save">Sélectionnez la sauvegarde que vous souhaitez utiliser</label>
-          <select
-            id="select-save"
-            className="select w-full"
-            onChange={async (e) => {
-              await store.set(STORE_KEYS.LAST_SELECTED_SAVE_NAME, e.target.value)
-              await store.save()
-              refetchSelectedSaveFiles()
-            }}
-          >
-            {deltaruneSavesIndex?.map((save) => (
-              <option key={save.name} value={save.name}>
-                {save.name}
-              </option>
-            ))}
-          </select>
         </div>
         {changes.size > 0 && (
           <label className="flex flex-row gap-2" htmlFor="only-patch-changes">

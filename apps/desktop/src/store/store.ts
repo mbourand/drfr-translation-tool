@@ -8,7 +8,6 @@ export const STORE_KEYS = {
   UTMT_CLI_FOLDER_PATH: 'utmt_cli_folder_path',
   GIT_FOLDER_PATH: 'git_folder_path',
   SAVES_FOLDER_PATH: 'saves_folder_path',
-  LAST_SELECTED_SAVE_NAME: 'last_selected_save_name',
   THEME: 'theme'
 } as const
 

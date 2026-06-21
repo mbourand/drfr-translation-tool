@@ -8,15 +8,10 @@ export const ORIGINAL_FILE_EXT = '.original'
 export const PATCHED_FILE_EXT = '.patched'
 const ON_THE_FLY_STRINGS_FILE_NAME = '.current_strings.txt'
 
-type SaveFile = {
-  name: string
-  url: string
-}
-
-type ChangeSaveFilesFromNetworkParams = {
-  savesFolder: string
-  savesFiles: SaveFile[]
-}
+// Debug saves shipped in the translation git repo, copied into the user's saves folder under the
+// `debug_save` name on every launch so testers always have an up-to-date set of checkpoint saves.
+const DEBUG_SAVES_PATH_IN_GIT_FOLDER = ['script', 'DebugMode', 'debug_save']
+const DEBUG_SAVES_DEST_FOLDER_NAME = 'debug_save'
 
 export type PatchGameTranslationFile = {
   pathInGameFolder: string
@@ -24,19 +19,15 @@ export type PatchGameTranslationFile = {
   pathInGitFolder: string
 }
 
-export const changeSaveFilesFromNetwork = async ({ savesFiles, savesFolder }: ChangeSaveFilesFromNetworkParams) => {
-  const saveFilesPromises = savesFiles.map(async (file) => {
-    const response = await fetch(file.url)
-    if (!response.ok) {
-      throw new Error(`Failed to fetch save file from ${file.url}`)
-    }
-    return { name: file.name, content: await response.text() }
-  })
-  const saveFilesContents = await Promise.all(saveFilesPromises)
-  for (const saveFile of saveFilesContents) {
-    const saveFilePath = await path.join(savesFolder, saveFile.name)
-    await writeTextFile(saveFilePath, saveFile.content)
-  }
+type CopyDebugSavesParams = {
+  gitFolder: string
+  savesFolder: string
+}
+
+export const copyDebugSaves = async ({ gitFolder, savesFolder }: CopyDebugSavesParams) => {
+  const source = await path.join(gitFolder, ...DEBUG_SAVES_PATH_IN_GIT_FOLDER)
+  const destination = await path.join(savesFolder, DEBUG_SAVES_DEST_FOLDER_NAME)
+  await invoke(RUST_COMMANDS.COPY_DIR, { source, destination })
 }
 
 type PatchAndLaunchGameParams = {
@@ -44,7 +35,6 @@ type PatchAndLaunchGameParams = {
   utmtCliFolder: string
   gitFolder: string
   savesFolder: string
-  savesFiles: SaveFile[]
   files: PatchGameTranslationFile[]
 }
 
@@ -52,11 +42,10 @@ export const patchAndLaunchGame = async ({
   files,
   gameFolder,
   gitFolder,
-  savesFiles,
   savesFolder,
   utmtCliFolder
 }: PatchAndLaunchGameParams) => {
-  await changeSaveFilesFromNetwork({ savesFolder, savesFiles })
+  await copyDebugSaves({ gitFolder, savesFolder })
 
   for (const file of files) {
     const absoluteFilePathInGameFolder = await path.join(gameFolder, file.pathInGameFolder ?? '')

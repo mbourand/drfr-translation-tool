@@ -1,7 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 use std::io::{Cursor, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 /// What "launch the game" means on the host OS. Windows (and macOS, left unchanged) spawn the
@@ -200,6 +200,47 @@ async fn pull_changes_from_git(git_folder: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Recursively copy a directory tree from `source` into `destination`, creating `destination` and
+/// any intermediate directories. Existing files at the destination are overwritten. Used to seed
+/// the user's saves folder with the debug saves shipped in the translation git repo.
+fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(destination)
+        .map_err(|e| format!("Failed to create directory {}: {}", destination.display(), e))?;
+
+    let entries = std::fs::read_dir(source)
+        .map_err(|e| format!("Failed to read directory {}: {}", source.display(), e))?;
+
+    for entry in entries {
+        let entry = entry
+            .map_err(|e| format!("Failed to read an entry in {}: {}", source.display(), e))?;
+        let entry_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("Failed to read file type for {}: {}", entry_path.display(), e))?;
+
+        if file_type.is_dir() {
+            copy_dir_recursive(&entry_path, &destination_path)?;
+        } else {
+            std::fs::copy(&entry_path, &destination_path).map_err(|e| {
+                format!(
+                    "Failed to copy {} to {}: {}",
+                    entry_path.display(),
+                    destination_path.display(),
+                    e
+                )
+            })?;
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn copy_dir(source: String, destination: String) -> Result<(), String> {
+    copy_dir_recursive(Path::new(&source), Path::new(&destination))
+}
+
 #[tauri::command]
 fn unzip_file(path: String, target_dir: String) -> Result<(), String> {
     let archive = std::fs::read(&path)
@@ -233,6 +274,7 @@ pub fn run() {
             run_game_executable,
             import_strings,
             unzip_file,
+            copy_dir,
             is_dev,
             pull_changes_from_git,
         ])
