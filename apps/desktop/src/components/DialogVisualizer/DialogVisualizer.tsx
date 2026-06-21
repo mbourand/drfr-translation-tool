@@ -73,13 +73,13 @@ const BOX_CONFIGS = {
   },
   battle: {
     name: 'Combat',
-    maxCharactersPerLine: Infinity,
-    maxCharactersWithHead: Infinity,
+    maxCharactersPerLine: 33,
+    maxCharactersWithHead: 33,
     characterWidth: 17.8,
     maxLines: Infinity,
     lineHeight: 44,
     hasAsteriskHandling: false,
-    autoLineBreak: false
+    autoLineBreak: true
   }
 } as const satisfies Record<BoxKind, BoxType>
 
