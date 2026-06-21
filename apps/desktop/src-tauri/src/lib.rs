@@ -71,10 +71,17 @@ async fn import_strings(
     output_data_win_path: &str,
     chapter: u32,
 ) -> Result<(), String> {
-    let import_script_path = format!(
-        "{}/Script/UMT/DRFR/ImporterToutTranslationTool.csx",
+    let importer_tout_script_path = format!(
+        "{}/script/UMT/DRFR/ImporterToutTranslationTool.csx",
         git_root_folder_path
     );
+
+    let import_script_path = format!(
+        "{}/data/Code/chapter{}.csx",
+        git_chapter_folder_path,
+        chapter.to_string()
+    );
+
     let utmt_cli_program_path = utmt_program_path(std::env::consts::OS, utmt_cli_folder_path);
 
     if utmt_needs_exec_bit(std::env::consts::OS) {
@@ -82,17 +89,18 @@ async fn import_strings(
     }
 
     let debug_mode_script_path = format!(
-        "{}/Script/UMT/DRFR/Mode Debug (Chapitre {}).csx",
+        "{}/script/DebugMode/debug_mode_chap{}.csx",
         git_root_folder_path,
         chapter.to_string()
     );
 
-	println!(
-		"Importing strings for chapter {} using scripts: {}, {}",
-		chapter.to_string(),
-		import_script_path,
-		debug_mode_script_path
-	);
+    println!(
+        "Importing strings for chapter {} using scripts: {}, {} and {}",
+        chapter.to_string(),
+        importer_tout_script_path,
+        import_script_path,
+        debug_mode_script_path
+    );
 
     if !PathBuf::from(&debug_mode_script_path).exists() {
         println!(
@@ -102,9 +110,12 @@ async fn import_strings(
     }
 
     let mut utmt_command = Command::new(utmt_cli_program_path)
+        .current_dir(git_root_folder_path)
         .args([
             "load",
             &source_data_win_path,
+            "-s",
+            &importer_tout_script_path,
             "-s",
             &import_script_path,
             "-s",
@@ -169,7 +180,7 @@ async fn pull_changes_from_git(git_folder: &str) -> Result<(), String> {
         .output()
         .map_err(|e| format!("Failed to execute git checkout: {}", e))?;
 
-	println!("Git checkout output: {}", String::from_utf8_lossy(&output.stdout));
+    println!("Git checkout output: {}", String::from_utf8_lossy(&output.stdout));
 
     if !output.status.success() {
         return Err(format!("git checkout failed: {}", String::from_utf8_lossy(&output.stderr)));
@@ -181,7 +192,7 @@ async fn pull_changes_from_git(git_folder: &str) -> Result<(), String> {
         .output()
         .map_err(|e| format!("Failed to execute git pull: {}", e))?;
 
-	println!("Git pull output: {}", String::from_utf8_lossy(&output.stdout));
+    println!("Git pull output: {}", String::from_utf8_lossy(&output.stdout));
 
     if !output.status.success() {
         return Err(format!("git pull failed: {}", String::from_utf8_lossy(&output.stderr)));
