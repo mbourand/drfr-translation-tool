@@ -3,6 +3,11 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": ["main"],
+  "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false
+    }
+  },
   "permissions": [
     "oauth:allow-cancel",
     "oauth:allow-start",
