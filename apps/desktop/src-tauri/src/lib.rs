@@ -3,27 +3,23 @@
 use std::io::{Cursor, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use tauri_plugin_opener::OpenerExt;
-
-/// Deltarune's Steam app id (covers both the demo and the full release). Used to launch the
-/// Steam/Proton build on Linux via a `steam://` URL.
-const DELTARUNE_STEAM_APP_ID: &str = "1671210";
 
 /// What "launch the game" means on the host OS. Windows (and macOS, left unchanged) spawn the
-/// Windows executable directly; Linux runs the Steam/Proton build by handing a `steam://` URL to
-/// Steam, which sets up the Proton prefix/runtime itself (a Windows binary can't be spawned there).
+/// Windows executable directly; Linux runs that same Windows executable through Wine (no native
+/// Linux build exists).
 #[derive(Debug, PartialEq, Eq)]
 enum LaunchAction {
     RunExecutable(String),
-    OpenSteamUrl(String),
+    RunWithWine(String),
 }
 
 /// Pure decision: map the host OS + Game folder to a launch action. Kept free of side effects so
 /// the per-OS branching is unit-testable on any host (the OS is passed in, not read from `env`).
 fn launch_action(os: &str, game_folder_path: &str) -> LaunchAction {
+    let executable_path = format!("{}/DELTARUNE.exe", game_folder_path);
     match os {
-        "linux" => LaunchAction::OpenSteamUrl(format!("steam://rungameid/{}", DELTARUNE_STEAM_APP_ID)),
-        _ => LaunchAction::RunExecutable(format!("{}/DELTARUNE.exe", game_folder_path)),
+        "linux" => LaunchAction::RunWithWine(executable_path),
+        _ => LaunchAction::RunExecutable(executable_path),
     }
 }
 
@@ -155,20 +151,23 @@ async fn import_strings(
 }
 
 #[tauri::command]
-async fn run_game_executable(app: tauri::AppHandle, game_folder_path: &str) -> Result<(), String> {
-    // Thin shell: decide per-OS, then execute. Windows spawns the binary directly; Linux hands the
-    // game off to Steam, which sets up the Proton prefix/runtime (see launch_action).
-    match launch_action(std::env::consts::OS, game_folder_path) {
-        LaunchAction::RunExecutable(executable_path) => Command::new(executable_path)
-            .current_dir(game_folder_path)
-            .spawn()
-            .map_err(|e| format!("Failed to start the game executable: {}", e))
-            .map(|_| ()),
-        LaunchAction::OpenSteamUrl(url) => app
-            .opener()
-            .open_url(url, None::<&str>)
-            .map_err(|e| format!("Failed to launch the game through Steam: {}", e)),
-    }
+async fn run_game_executable(game_folder_path: &str) -> Result<(), String> {
+    // Thin shell: decide per-OS, then execute. Windows (and macOS) spawn the binary directly; Linux
+    // runs the same Windows executable through Wine (see launch_action).
+    let mut command = match launch_action(std::env::consts::OS, game_folder_path) {
+        LaunchAction::RunExecutable(executable_path) => Command::new(executable_path),
+        LaunchAction::RunWithWine(executable_path) => {
+            let mut command = Command::new("wine");
+            command.arg(executable_path);
+            command
+        }
+    };
+
+    command
+        .current_dir(game_folder_path)
+        .spawn()
+        .map_err(|e| format!("Failed to start the game executable: {}", e))
+        .map(|_| ())
 }
 
 #[tauri::command]
@@ -254,10 +253,10 @@ mod tests {
     }
 
     #[test]
-    fn linux_launches_the_game_through_steam() {
+    fn linux_launches_the_executable_through_wine() {
         assert_eq!(
             launch_action("linux", "/home/user/Deltarune"),
-            LaunchAction::OpenSteamUrl("steam://rungameid/1671210".to_string())
+            LaunchAction::RunWithWine("/home/user/Deltarune/DELTARUNE.exe".to_string())
         );
     }
 
