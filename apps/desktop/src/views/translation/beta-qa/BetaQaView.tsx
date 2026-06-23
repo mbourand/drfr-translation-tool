@@ -11,13 +11,13 @@ import { TranslationSidePanel } from '../SidePanel'
 import { DialogVisualizer } from '../../../components/DialogVisualizer/DialogVisualizer'
 import { ReviewStringSearch } from '../review/ReviewStringSearch'
 import { isRowVisible } from '../isCellVisible'
-import { LineVerdict, isLineKo, useBetaReviewMarks } from '../../../hooks/useBetaReviewMarks'
+import { useBetaReviewMarks } from '../../../hooks/useBetaReviewMarks'
 import { LaunchGameButton } from '../edit/SidePanel/LaunchGameButton'
 import { BetaQaGrid } from './BetaQaGrid'
-import { ReviewDepthDistribution } from './ReviewDepthDistribution'
+import { BetaReviewToolbar } from './BetaReviewToolbar'
+import { DEFAULT_FILTER, BetaFilterState, passesFilter, summarize } from './betaMetrics'
 
 const NO_CHANGES = new Map<string, string>()
-const NO_VERDICT: LineVerdict = { okCount: 0, koCount: 0, myVerdict: null }
 
 export const BetaQaView = () => {
   const {
@@ -45,13 +45,14 @@ export const BetaQaView = () => {
     filteredLines
   )
 
-  // "KO uniquement" filter: client-side predicate over the already-loaded verdicts, composed on top
-  // of the existing string-search results. A line counts as KO when any QA marked it KO (KO prevails).
-  const [koOnly, setKoOnly] = useState(false)
-  const displayedLines = useMemo(() => {
-    const lines = filteredLines ?? []
-    return koOnly ? lines.filter((line) => isLineKo(verdictsByLine.get(line.lineNumber) ?? NO_VERDICT)) : lines
-  }, [koOnly, filteredLines, verdictsByLine])
+  // Verdict-bucket filter (Tout / Non relu / KO / OK, with an OK-depth threshold) applied client-side
+  // over the already-loaded verdicts, composed on top of the existing string-search results.
+  const [betaFilter, setBetaFilter] = useState<BetaFilterState>(DEFAULT_FILTER)
+  const summary = useMemo(() => summarize(verdictsByLine), [verdictsByLine])
+  const displayedLines = useMemo(
+    () => (filteredLines ?? []).filter((line) => passesFilter(verdictsByLine.get(line.lineNumber), betaFilter)),
+    [betaFilter, filteredLines, verdictsByLine]
+  )
 
   // The launcher patches from in-memory content, so the `beta` snapshot is launched read-only:
   // each file's VF as fetched, no changes (PRD #5). Reuses the edit view's launch flow unchanged.
@@ -99,18 +100,13 @@ export const BetaQaView = () => {
           />
         )}
         {filteredLines && selectedFileContents && selectedFile && (
-          <div className="flex flex-row flex-wrap items-center gap-3 w-full max-w-[1700px] pb-2">
-            <ReviewDepthDistribution verdicts={verdictsByLine} />
-            <label className="label cursor-pointer gap-2 text-sm ml-auto">
-              <input
-                type="checkbox"
-                className="checkbox checkbox-sm checkbox-error"
-                checked={koOnly}
-                onChange={(e) => setKoOnly(e.target.checked)}
-              />
-              <span>KO uniquement</span>
-            </label>
-          </div>
+          <BetaReviewToolbar
+            summary={summary}
+            filter={betaFilter}
+            onFilterChange={setBetaFilter}
+            verdicts={Array.from(verdictsByLine.values())}
+            fileName={selectedFile.name}
+          />
         )}
         {filteredLines && selectedFileContents && selectedFile && (
           <div className="w-full h-full pb-4 flex flex-row justify-center">
