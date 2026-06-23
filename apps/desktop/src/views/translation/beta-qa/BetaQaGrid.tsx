@@ -6,6 +6,7 @@ import { Line, MatchLanguages } from '../../../types/translation'
 import { HighlightedText } from '../../../components/HighlightedText'
 import { CheckIcon } from '../../../components/icons/CheckIcon'
 import { CrossIcon } from '../../../components/icons/CrossIcon'
+import { MinusIcon } from '../../../components/icons/MinusIcon'
 import { LineVerdict, Verdict, isLineKo } from '../../../hooks/useBetaReviewMarks'
 import { myTheme } from '../edit/grid-theme'
 
@@ -79,53 +80,76 @@ export const BetaQaGrid = ({
     return <HighlightedText text={cellText} rowIndex={params.node.rowIndex} searchResult={stringSearchResult} />
   }
 
-  // Verdict control: a small check (testée, aucun bug) and cross (testée, bug trouvé) toggle pair,
-  // then the two distinct-QA tallies as colour-coded badges. Controls on the left, counts on the
-  // right reads cleaner than a number wedged between the buttons. Everything sits in fixed-size slots
-  // so the cell never reflows: the square buttons keep their box across the inactive→active flip, and
-  // each count lives in a fixed-width slot that stays present (just empty) at 0. Inactive toggles keep
-  // their semantic colour on the icon (clear + readable); the caller's own verdict shows filled.
+  // Verdict control: one tri-state segmented toggle reflecting the caller's own verdict —
+  // KO (testée, bug trouvé) · non relu · OK (testée, aucun bug) — left to right. The lit segment is
+  // the caller's current verdict; clicking KO/OK sets (or flips) it, clicking the middle returns the
+  // line to non relu. "Non relu" is line-aware: on a KO line it resolves the line's KO for everyone
+  // (line-level clear, ADR 0002); otherwise it just clears the caller's own verdict (misclick).
+  //
+  // The segmented control is a fixed-size box (segments keep their box across the inactive→active
+  // colour flip) and the count sits in a fixed-width slot, so the cell never reflows. Per QA request
+  // the validation (OK) tally only shows when the line is NOT in error; a KO line shows its KO tally
+  // instead (a green "5 validations" on a flagged line would read as a contradiction).
   const reviewCellRenderer = (params: ICellRendererParams<Line>) => {
     if (!params.data) return null
     const line = params.data
     const { okCount, koCount, myVerdict } = verdicts.get(line.lineNumber) ?? NO_VERDICT
-    const okLit = myVerdict === 'OK'
     const koLit = myVerdict === 'KO'
+    const unread = myVerdict === null
+    const okLit = myVerdict === 'OK'
+    const lineInError = koCount > 0
+
+    // Middle "non relu": resolve the line's KO for everyone if it's flagged, else drop my own verdict.
+    const returnToUnread = () => (lineInError ? onClearKo(line) : myVerdict !== null && onClearMine(line))
 
     return (
       <div className="flex items-center gap-2 h-full leading-6">
-        <div className="flex items-center gap-0.5">
+        <div className="join">
           <button
             type="button"
-            aria-label={okLit ? 'Annuler votre verdict' : 'Marquer : testée, aucun bug'}
-            title={okLit ? 'Testée, aucun bug — cliquez pour annuler votre verdict' : 'Testée, aucun bug'}
-            className={`btn btn-xs btn-square [&_svg]:size-4 ${okLit ? 'btn-success' : 'btn-ghost text-success'}`}
-            onClick={() => (okLit ? onClearMine(line) : onSetVerdict(line, 'OK'))}
-          >
-            <CheckIcon />
-          </button>
-          <button
-            type="button"
-            aria-label={koLit ? 'Résoudre le KO de cette ligne' : 'Marquer : testée, bug trouvé'}
-            title={
-              koLit
-                ? 'Bug signalé — cliquez pour résoudre le KO (efface le KO de tous les QA)'
-                : 'Testée, bug trouvé'
-            }
-            className={`btn btn-xs btn-square [&_svg]:size-4 ${koLit ? 'btn-error' : 'btn-ghost text-error'}`}
-            onClick={() => (koLit ? onClearKo(line) : onSetVerdict(line, 'KO'))}
+            aria-label="Marquer : testée, bug trouvé"
+            title="Testée, bug trouvé"
+            className={`join-item btn btn-xs btn-square [&_svg]:size-4 ${koLit ? 'btn-error' : 'text-error/80'}`}
+            onClick={() => !koLit && onSetVerdict(line, 'KO')}
           >
             <CrossIcon />
           </button>
+          <button
+            type="button"
+            aria-label={lineInError ? 'Résoudre le KO de cette ligne' : 'Remettre en non relu'}
+            title={
+              lineInError
+                ? 'Résoudre le KO (efface le KO de tous les QA et remet la ligne en non relu)'
+                : 'Non relu — annuler votre verdict'
+            }
+            className={`join-item btn btn-xs btn-square [&_svg]:size-4 ${unread ? 'btn-active' : 'text-base-content/40'}`}
+            onClick={returnToUnread}
+          >
+            <MinusIcon />
+          </button>
+          <button
+            type="button"
+            aria-label="Marquer : testée, aucun bug"
+            title="Testée, aucun bug"
+            className={`join-item btn btn-xs btn-square [&_svg]:size-4 ${okLit ? 'btn-success' : 'text-success/80'}`}
+            onClick={() => !okLit && onSetVerdict(line, 'OK')}
+          >
+            <CheckIcon />
+          </button>
         </div>
-        <div className="flex items-center gap-1 text-xs tabular-nums">
-          <span className="w-5 flex justify-center" title="QA ayant validé cette ligne">
-            {okCount > 0 && <span className="badge badge-xs badge-success font-medium">{okCount}</span>}
-          </span>
-          <span className="w-5 flex justify-center" title="QA ayant signalé un bug">
-            {koCount > 0 && <span className="badge badge-xs badge-error font-medium">{koCount}</span>}
-          </span>
-        </div>
+        <span className="w-5 flex justify-center text-xs tabular-nums">
+          {lineInError ? (
+            <span className="badge badge-xs badge-error font-medium" title="QA ayant signalé un bug">
+              {koCount}
+            </span>
+          ) : (
+            okCount > 0 && (
+              <span className="badge badge-xs badge-success font-medium" title="QA ayant validé cette ligne">
+                {okCount}
+              </span>
+            )
+          )}
+        </span>
       </div>
     )
   }
