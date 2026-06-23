@@ -4,6 +4,8 @@ import { useEffect, useRef } from 'react'
 import { StringSearchResult } from '../../../components/StringSearch/types'
 import { Line, MatchLanguages } from '../../../types/translation'
 import { HighlightedText } from '../../../components/HighlightedText'
+import { CheckIcon } from '../../../components/icons/CheckIcon'
+import { BugIcon } from '../../../components/icons/BugIcon'
 import { LineVerdict, Verdict, isLineKo } from '../../../hooks/useBetaReviewMarks'
 import { myTheme } from '../edit/grid-theme'
 
@@ -77,33 +79,47 @@ export const BetaQaGrid = ({
     return <HighlightedText text={cellText} rowIndex={params.node.rowIndex} searchResult={stringSearchResult} />
   }
 
+  // Icon-only OK/KO toggles: a check (tested, no bug) and a bug (tested, bug found). Each is a fixed-
+  // size square button so the cell never reflows; the distinct-QA count sits in a fixed-width slot
+  // beside it (empty, not removed, at 0) for the same reason. Inactive = coloured outline (clear
+  // affordance + good contrast); the caller's own verdict shows as the matching filled button.
   const reviewCellRenderer = (params: ICellRendererParams<Line>) => {
     if (!params.data) return null
     const line = params.data
     const { okCount, koCount, myVerdict } = verdicts.get(line.lineNumber) ?? NO_VERDICT
+    const okLit = myVerdict === 'OK'
+    const koLit = myVerdict === 'KO'
 
     return (
       <div className="flex items-center gap-1 h-full leading-6">
         <button
           type="button"
-          className={`btn btn-xs ${myVerdict === 'OK' ? 'btn-success' : 'btn-ghost'}`}
-          title={myVerdict === 'OK' ? 'Annuler votre verdict (remettre en non relu)' : 'Marquer OK (testée, aucun bug)'}
-          onClick={() => (myVerdict === 'OK' ? onClearMine(line) : onSetVerdict(line, 'OK'))}
+          aria-label={okLit ? 'Annuler votre verdict' : 'Marquer : testée, aucun bug'}
+          title={okLit ? 'Testée, aucun bug — cliquez pour annuler votre verdict' : 'Testée, aucun bug'}
+          className={`btn btn-sm btn-square [&_svg]:size-5 ${okLit ? 'btn-success' : 'btn-outline btn-success'}`}
+          onClick={() => (okLit ? onClearMine(line) : onSetVerdict(line, 'OK'))}
         >
-          OK{okCount > 0 ? ` ${okCount}` : ''}
+          <CheckIcon />
         </button>
+        <span className="w-4 text-center text-xs tabular-nums text-base-content/70" title="QA ayant validé cette ligne">
+          {okCount > 0 ? okCount : ''}
+        </span>
         <button
           type="button"
-          className={`btn btn-xs ${myVerdict === 'KO' ? 'btn-error' : 'btn-ghost'}`}
+          aria-label={koLit ? 'Résoudre le KO de cette ligne' : 'Marquer : testée, bug trouvé'}
           title={
-            myVerdict === 'KO'
-              ? 'Résoudre le KO de cette ligne (efface le KO de tous les QA)'
-              : 'Marquer KO (testée, bug trouvé)'
+            koLit
+              ? 'Bug signalé — cliquez pour résoudre le KO (efface le KO de tous les QA)'
+              : 'Testée, bug trouvé'
           }
-          onClick={() => (myVerdict === 'KO' ? onClearKo(line) : onSetVerdict(line, 'KO'))}
+          className={`btn btn-sm btn-square [&_svg]:size-5 ${koLit ? 'btn-error' : 'btn-outline btn-error'}`}
+          onClick={() => (koLit ? onClearKo(line) : onSetVerdict(line, 'KO'))}
         >
-          KO{koCount > 0 ? ` ${koCount}` : ''}
+          <BugIcon />
         </button>
+        <span className="w-4 text-center text-xs tabular-nums text-base-content/70" title="QA ayant signalé un bug">
+          {koCount > 0 ? koCount : ''}
+        </span>
       </div>
     )
   }
@@ -150,7 +166,7 @@ export const BetaQaGrid = ({
         {
           colId: 'review',
           headerName: 'Verdict',
-          width: 150,
+          width: 130,
           sortable: false,
           cellClass: 'leading-6!',
           cellRenderer: reviewCellRenderer
