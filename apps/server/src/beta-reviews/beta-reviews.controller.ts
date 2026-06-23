@@ -1,12 +1,17 @@
 import { Body, Controller, Delete, Get, Post, Query, Req, UseGuards } from '@nestjs/common'
-import { IsString } from 'class-validator'
+import { IsEnum, IsString } from 'class-validator'
+import { Verdict } from '@prisma/client'
 import { AuthedRequest, GithubAuthGuard } from '@/auth/github-auth.guard'
 import { BetaReviewsService } from './beta-reviews.service'
 
-class MarkDto {
+class LineDto {
   @IsString() filePath: string
   @IsString() original: string
   @IsString() translated: string
+}
+
+class SetVerdictDto extends LineDto {
+  @IsEnum(Verdict) verdict: Verdict
 }
 
 @UseGuards(GithubAuthGuard)
@@ -14,15 +19,24 @@ class MarkDto {
 export class BetaReviewsController {
   constructor(private readonly betaReviewsService: BetaReviewsService) {}
 
+  // Set/replace the caller's own verdict on a line (OK<->KO flip overwrites in place).
   @Post('marks')
-  async mark(@Req() req: AuthedRequest, @Body() body: MarkDto) {
-    await this.betaReviewsService.mark(req.user.id, body.filePath, body.original, body.translated)
+  async setVerdict(@Req() req: AuthedRequest, @Body() body: SetVerdictDto) {
+    await this.betaReviewsService.setVerdict(req.user.id, body.filePath, body.original, body.translated, body.verdict)
     return { success: true }
   }
 
+  // Clear only the caller's own verdict (misclick / unread recovery).
   @Delete('marks')
-  async unmark(@Req() req: AuthedRequest, @Body() body: MarkDto) {
-    await this.betaReviewsService.unmark(req.user.id, body.filePath, body.original, body.translated)
+  async clearMine(@Req() req: AuthedRequest, @Body() body: LineDto) {
+    await this.betaReviewsService.clearMine(req.user.id, body.filePath, body.original, body.translated)
+    return { success: true }
+  }
+
+  // Line-level KO clear: remove EVERY QA's KO on the line (ADR 0002). No authorship check.
+  @Delete('marks/ko')
+  async clearKo(@Body() body: LineDto) {
+    await this.betaReviewsService.clearKo(body.filePath, body.original, body.translated)
     return { success: true }
   }
 

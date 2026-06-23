@@ -65,8 +65,27 @@ Whoever reviews a translation in the QA stage. Distinct from a _beta tester_.
 
 **Relecture de la beta** (_Beta QA_):
 A separate feature — line-level verification of the game's beta *build*, played in-game,
-tracked as per-line marks. **Not** the QA review stage above, which is PR-diff review of a
-single translation. Keep the two distinct in conversation and code.
+tracked as per-line **verdicts**. **Not** the QA review stage above, which is PR-diff review
+of a single translation. Keep the two distinct in conversation and code.
+
+**Verdict** (Beta QA):
+What one QA recorded about one beta line after testing it in-game. Three mutually-exclusive
+states per (QA, line): _non relu_ (no verdict — the default, and what "mark as unread" returns
+a line to), **OK** (tested, no bug), **KO** (tested, found a bug). The verdict itself carries
+the fact that the line was tested — there is no separate "reviewed" flag. Replaces the earlier
+binary reviewed/not-reviewed mark.
+_Avoid_: mark (now a verdict), reviewed flag.
+
+**OK / KO counts** (Beta QA):
+A line shows two independent tallies of distinct QAs: its **OK count** and its **KO count**.
+A line is treated as KO whenever its KO count ≥ 1, regardless of OK count (_KO prevails_) —
+a single reported bug outranks any number of "looks fine" verdicts.
+
+**Clearing KO** (Beta QA):
+An OK verdict is personal — only its author may change or remove it. A line's KO state is
+not: **any** QA may clear it, which removes every QA's KO verdict on that line at once. This
+asymmetry exists so a bug isn't stuck flagged when the QA who reported it is unavailable;
+the bug itself is triaged on Discord, not in-tool.
 
 ### Lifecycle states
 
