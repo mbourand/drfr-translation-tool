@@ -102,14 +102,18 @@ export const BetaQaGrid = ({
     // Middle "non relu": resolve the line's KO for everyone if it's flagged, else drop my own verdict.
     const returnToUnread = () => (lineInError ? onClearKo(line) : myVerdict !== null && onClearMine(line))
 
+    // Every segment shares the exact same base classes (size never changes); only the background and
+    // icon colour vary between the inactive and the lit state, so the lit segment never grows.
+    const segment = 'flex items-center justify-center w-7 h-6 transition-colors [&_svg]:size-4 cursor-pointer'
+
     return (
       <div className="flex items-center gap-2 h-full leading-6">
-        <div className="join">
+        <div className="flex items-center rounded-md border border-base-content/20 overflow-hidden">
           <button
             type="button"
             aria-label="Marquer : testée, bug trouvé"
             title="Testée, bug trouvé"
-            className={`join-item btn btn-xs btn-square [&_svg]:size-4 ${koLit ? 'btn-error' : 'text-error/80'}`}
+            className={`${segment} border-r border-base-content/20 ${koLit ? 'bg-error text-error-content' : 'text-error hover:bg-error/10'}`}
             onClick={() => !koLit && onSetVerdict(line, 'KO')}
           >
             <CrossIcon />
@@ -122,7 +126,7 @@ export const BetaQaGrid = ({
                 ? 'Résoudre le KO (efface le KO de tous les QA et remet la ligne en non relu)'
                 : 'Non relu — annuler votre verdict'
             }
-            className={`join-item btn btn-xs btn-square [&_svg]:size-4 ${unread ? 'btn-active' : 'text-base-content/40'}`}
+            className={`${segment} border-r border-base-content/20 ${unread ? 'bg-base-content/15 text-base-content' : 'text-base-content/40 hover:bg-base-content/10'}`}
             onClick={returnToUnread}
           >
             <MinusIcon />
@@ -131,7 +135,7 @@ export const BetaQaGrid = ({
             type="button"
             aria-label="Marquer : testée, aucun bug"
             title="Testée, aucun bug"
-            className={`join-item btn btn-xs btn-square [&_svg]:size-4 ${okLit ? 'btn-success' : 'text-success/80'}`}
+            className={`${segment} ${okLit ? 'bg-success text-success-content' : 'text-success hover:bg-success/10'}`}
             onClick={() => !okLit && onSetVerdict(line, 'OK')}
           >
             <CheckIcon />
@@ -196,7 +200,7 @@ export const BetaQaGrid = ({
         {
           colId: 'review',
           headerName: 'Verdict',
-          width: 112,
+          width: 132,
           sortable: false,
           cellClass: 'leading-6!',
           cellRenderer: reviewCellRenderer
