@@ -10,13 +10,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// A single QA's mark that they personally verified one line.
-/// A line's distinct-QA count = COUNT(DISTINCT userId) for a (filePath, contentHash).
+/// A QA's verdict on one beta line: OK (tested, no bug) or KO (tested, found a bug).
+/// Recording any verdict inherently means the line was tested — there is no separate "reviewed" flag.
+enum Verdict {
+  OK
+  KO
+}
+
+/// A single QA's verdict on one line.
+/// A line's distinct-QA OK/KO counts = COUNT(DISTINCT userId) per verdict for a (filePath, contentHash).
 model BetaReviewMark {
   id          String   @id @default(cuid())
   userId      String // GitHub user id, from the authenticated session
   filePath    String
   contentHash String // backend-computed, versioned (e.g. "v1:...")
+  /// Defaults to OK so rows from the old binary "reviewed" feature keep their original
+  /// "verified, looks fine" meaning. One verdict per (userId, filePath, contentHash); OK<->KO flips it.
+  verdict     Verdict  @default(OK)
   createdAt   DateTime @default(now())
 
   @@unique([userId, filePath, contentHash]) // a user marks a given line once

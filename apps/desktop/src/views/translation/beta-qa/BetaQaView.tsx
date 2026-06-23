@@ -11,12 +11,13 @@ import { TranslationSidePanel } from '../SidePanel'
 import { DialogVisualizer } from '../../../components/DialogVisualizer/DialogVisualizer'
 import { ReviewStringSearch } from '../review/ReviewStringSearch'
 import { isRowVisible } from '../isCellVisible'
-import { useBetaReviewMarks } from '../../../hooks/useBetaReviewMarks'
+import { LineVerdict, isLineKo, useBetaReviewMarks } from '../../../hooks/useBetaReviewMarks'
 import { LaunchGameButton } from '../edit/SidePanel/LaunchGameButton'
 import { BetaQaGrid } from './BetaQaGrid'
 import { ReviewDepthDistribution } from './ReviewDepthDistribution'
 
 const NO_CHANGES = new Map<string, string>()
+const NO_VERDICT: LineVerdict = { okCount: 0, koCount: 0, myVerdict: null }
 
 export const BetaQaView = () => {
   const {
@@ -39,7 +40,18 @@ export const BetaQaView = () => {
     filteredLines
   } = useTranslationView(betaTranslationFiles)
 
-  const { countsByLine, toggleMark } = useBetaReviewMarks(selectedFile?.translatedPath, filteredLines)
+  const { verdictsByLine, setVerdict, clearMine, clearKo } = useBetaReviewMarks(
+    selectedFile?.translatedPath,
+    filteredLines
+  )
+
+  // "KO uniquement" filter: client-side predicate over the already-loaded verdicts, composed on top
+  // of the existing string-search results. A line counts as KO when any QA marked it KO (KO prevails).
+  const [koOnly, setKoOnly] = useState(false)
+  const displayedLines = useMemo(() => {
+    const lines = filteredLines ?? []
+    return koOnly ? lines.filter((line) => isLineKo(verdictsByLine.get(line.lineNumber) ?? NO_VERDICT)) : lines
+  }, [koOnly, filteredLines, verdictsByLine])
 
   // The launcher patches from in-memory content, so the `beta` snapshot is launched read-only:
   // each file's VF as fetched, no changes (PRD #5). Reuses the edit view's launch flow unchanged.
@@ -86,15 +98,30 @@ export const BetaQaView = () => {
             onMatchLanguageChanged={setMatchLanguage}
           />
         )}
-        {filteredLines && selectedFileContents && selectedFile && <ReviewDepthDistribution counts={countsByLine} />}
+        {filteredLines && selectedFileContents && selectedFile && (
+          <div className="flex flex-row flex-wrap items-center gap-3 w-full max-w-[1700px] pb-2">
+            <ReviewDepthDistribution verdicts={verdictsByLine} />
+            <label className="label cursor-pointer gap-2 text-sm ml-auto">
+              <input
+                type="checkbox"
+                className="checkbox checkbox-sm checkbox-error"
+                checked={koOnly}
+                onChange={(e) => setKoOnly(e.target.checked)}
+              />
+              <span>KO uniquement</span>
+            </label>
+          </div>
+        )}
         {filteredLines && selectedFileContents && selectedFile && (
           <div className="w-full h-full pb-4 flex flex-row justify-center">
             <BetaQaGrid
-              filteredLines={filteredLines}
+              filteredLines={displayedLines}
               matchLanguage={matchLanguage}
               stringSearchResult={stringSearchResult}
-              counts={countsByLine}
-              onToggleMark={(line, markedByMe) => toggleMark.mutate({ line, markedByMe })}
+              verdicts={verdictsByLine}
+              onSetVerdict={setVerdict}
+              onClearMine={clearMine}
+              onClearKo={clearKo}
               onReady={(e) => setGridApi(e.api)}
               onCellFocused={(e) => {
                 if (!filteredLines || e.rowIndex == null || typeof e.column !== 'object') return

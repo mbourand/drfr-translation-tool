@@ -37,6 +37,11 @@ html {
   white-space: break-spaces;
 }
 
+/* A line a QA marked KO stands out in the Beta QA grid (KO prevails over any OK count). */
+.ag-row.beta-qa-ko-row .ag-cell {
+  @apply bg-error/15;
+}
+
 @font-face {
   font-family: 'DTM-Mono';
   src: url('/DTM-Mono.otf') format('opentype');

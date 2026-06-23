@@ -164,22 +164,43 @@ export const TRANSLATION_API_URLS = {
     }
   },
   BETA_REVIEWS: {
-    // Distinct-QA counts for the `beta` file, one entry per marked (contentHash). Hashes with no
-    // mark are absent — the client treats a missing line hash as unreviewed (count 0).
+    // Distinct-QA OK/KO tallies for the `beta` file, one entry per (contentHash) that has at least one
+    // verdict. Hashes with no verdict are absent — the client treats a missing line hash as non relu.
     COUNTS: (filePath: string) =>
       ({
         url: `${ENV.TRANSLATION_API_BASE_URL}/beta-reviews/counts?filePath=${encodeURIComponent(filePath)}`,
         method: 'GET',
-        responseSchema: z.object({ contentHash: z.string(), count: z.number(), markedByMe: z.boolean() }).array()
+        responseSchema: z
+          .object({
+            contentHash: z.string(),
+            okCount: z.number(),
+            koCount: z.number(),
+            myVerdict: z.enum(['OK', 'KO']).nullable()
+          })
+          .array()
       } as const),
-    MARK: {
+    // Set/replace the caller's own verdict on a line (OK<->KO flip overwrites in place).
+    SET_VERDICT: {
       url: `${ENV.TRANSLATION_API_BASE_URL}/beta-reviews/marks`,
       method: 'POST',
+      bodySchema: z.object({
+        filePath: z.string(),
+        original: z.string(),
+        translated: z.string(),
+        verdict: z.enum(['OK', 'KO'])
+      }),
+      responseSchema: z.object({ success: z.boolean() })
+    },
+    // Clear only the caller's own verdict on a line (misclick / unread recovery).
+    CLEAR_MINE: {
+      url: `${ENV.TRANSLATION_API_BASE_URL}/beta-reviews/marks`,
+      method: 'DELETE',
       bodySchema: z.object({ filePath: z.string(), original: z.string(), translated: z.string() }),
       responseSchema: z.object({ success: z.boolean() })
     },
-    UNMARK: {
-      url: `${ENV.TRANSLATION_API_BASE_URL}/beta-reviews/marks`,
+    // Line-level KO clear: removes EVERY QA's KO on the line (any caller, no authorship check).
+    CLEAR_KO: {
+      url: `${ENV.TRANSLATION_API_BASE_URL}/beta-reviews/marks/ko`,
       method: 'DELETE',
       bodySchema: z.object({ filePath: z.string(), original: z.string(), translated: z.string() }),
       responseSchema: z.object({ success: z.boolean() })
