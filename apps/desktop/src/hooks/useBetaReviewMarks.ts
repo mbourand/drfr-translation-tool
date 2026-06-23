@@ -15,6 +15,9 @@ const NO_VERDICT: LineVerdict = { okCount: 0, koCount: 0, myVerdict: null }
 /** A line is treated as KO whenever any QA marked it KO, regardless of OK count (KO prevails). */
 export const isLineKo = (verdict: LineVerdict): boolean => verdict.koCount >= 1
 
+/** A line is OK when at least one QA validated it and nobody flagged it (KO prevails over OK). */
+export const isLineOk = (verdict: LineVerdict): boolean => verdict.koCount === 0 && verdict.okCount >= 1
+
 /**
  * Beta QA verdicts for one file. The backend returns OK/KO tallies keyed by content hash for only the
  * lines that have a verdict; this hook hashes each displayed line locally (recipe mirrors the backend)

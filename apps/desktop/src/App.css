@@ -37,14 +37,23 @@ html {
   white-space: break-spaces;
 }
 
-/* A line a QA marked KO stands out in the Beta QA grid (KO prevails over any OK count): a tinted
-   row plus a solid left accent bar on the first cell so it reads as "bug" while scrolling. */
+/* Beta QA rows are tinted by verdict, with a solid left accent bar on the first cell so the state
+   reads while scrolling: red for a flagged (KO) line, green for a validated (OK) line. KO prevails,
+   so a line is never both. */
 .ag-row.beta-qa-ko-row .ag-cell {
   @apply bg-error/20;
 }
 
 .ag-row.beta-qa-ko-row .ag-cell:first-of-type {
   box-shadow: inset 3px 0 0 0 var(--color-error);
+}
+
+.ag-row.beta-qa-ok-row .ag-cell {
+  @apply bg-success/15;
+}
+
+.ag-row.beta-qa-ok-row .ag-cell:first-of-type {
+  box-shadow: inset 3px 0 0 0 var(--color-success);
 }
 
 @font-face {

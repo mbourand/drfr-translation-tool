@@ -7,7 +7,7 @@ import { HighlightedText } from '../../../components/HighlightedText'
 import { CheckIcon } from '../../../components/icons/CheckIcon'
 import { CrossIcon } from '../../../components/icons/CrossIcon'
 import { MinusIcon } from '../../../components/icons/MinusIcon'
-import { LineVerdict, Verdict, isLineKo } from '../../../hooks/useBetaReviewMarks'
+import { LineVerdict, Verdict, isLineKo, isLineOk } from '../../../hooks/useBetaReviewMarks'
 import { myTheme } from '../edit/grid-theme'
 
 type BetaQaGridProps = {
@@ -142,16 +142,10 @@ export const BetaQaGrid = ({
           </button>
         </div>
         <span className="w-5 flex justify-center text-xs tabular-nums">
-          {lineInError ? (
-            <span className="badge badge-xs badge-error font-medium" title="QA ayant signalé un bug">
-              {koCount}
+          {!lineInError && okCount > 0 && (
+            <span className="badge badge-xs badge-success font-medium" title="QA ayant validé cette ligne">
+              {okCount}
             </span>
-          ) : (
-            okCount > 0 && (
-              <span className="badge badge-xs badge-success font-medium" title="QA ayant validé cette ligne">
-                {okCount}
-              </span>
-            )
           )}
         </span>
       </div>
@@ -173,7 +167,9 @@ export const BetaQaGrid = ({
       getRowId={({ data }) => !!data && data.lineNumber.toString()}
       rowClassRules={{
         'beta-qa-ko-row': (params) =>
-          !!params.data && isLineKo(verdictsRef.current.get(params.data.lineNumber) ?? NO_VERDICT)
+          !!params.data && isLineKo(verdictsRef.current.get(params.data.lineNumber) ?? NO_VERDICT),
+        'beta-qa-ok-row': (params) =>
+          !!params.data && isLineOk(verdictsRef.current.get(params.data.lineNumber) ?? NO_VERDICT)
       }}
       columnDefs={[
         { field: 'lineNumber', headerName: 'N°', width: 80, sortable: false, cellClass: 'leading-6!' },
