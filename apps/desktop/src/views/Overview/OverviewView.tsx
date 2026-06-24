@@ -10,6 +10,7 @@ import { TranslationType } from '../../routes/translation/schemas'
 import { TRANSLATION_APP_PAGES } from '../../routes/pages/routes'
 import { useNavigate } from 'react-router'
 import { reviewSignoffs } from '../../modules/prMarkers/reviewSignoffs'
+import { pruneReviewedLines } from '../../modules/qa-review/reviewedLines'
 
 const TRANSLATION_LABEL = 'Traduction'
 const WIP_LABEL = 'En cours'
@@ -79,6 +80,11 @@ const getTranslations = async () => {
   const translationMapper = (pr: TranslationType) => mapPRToTranslation(pr, pr.user.id === userInfos.id)
 
   const open = prs.filter((pr) => pr.state === 'open')
+
+  // Prune-on-read: local "already read" review marks are keyed by branch, so drop marks for any branch
+  // that is no longer an open translation (merged/closed). Runs only on a successful list fetch.
+  await pruneReviewedLines(open.map((pr) => pr.head.ref))
+
   const openInColumn = (column: LifecycleColumn) =>
     open.filter((pr) => deriveOpenColumn(pr) === column).map(translationMapper)
 

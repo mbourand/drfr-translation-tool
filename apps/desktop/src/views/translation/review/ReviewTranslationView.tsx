@@ -27,6 +27,7 @@ import { DialogVisualizer } from '../../../components/DialogVisualizer/DialogVis
 import { ReviewStringSearch } from './ReviewStringSearch'
 import { isRowVisible } from '../isCellVisible'
 import { UnsavedChangesModal } from './UnsavedChangesModal'
+import { useQaReviewedLines } from '../../../hooks/useQaReviewedLines'
 
 export const ReviewTranslationView = () => {
   const [searchParams] = useSearchParams()
@@ -255,6 +256,29 @@ export const ReviewTranslationView = () => {
       .map((line) => line.lineNumber)
   }, [selectedFileContents])
 
+  // The changed lines of every file (not just the open one), so the side panel can show per-file
+  // review progress and each line can be hashed for its local "already read" mark. Same predicate as
+  // `changedLines` above: a line the PR changed relative to both the previous version and its creation.
+  const changedLinesByFile = useMemo(() => {
+    if (!gridFiles || !translationFilesAtCreation) return undefined
+    const result = new Map<string, Line[]>()
+    for (const file of gridFiles) {
+      const atCreation = translationFilesAtCreation.find((f) => f.translatedPath === file.translatedPath)
+      if (!atCreation) continue
+      const changed = file.lines.filter((line) => {
+        const idx = binarySearch(atCreation.lines, (masterLine) => masterLine.lineNumber - line.lineNumber)
+        return line.oldTranslated !== line.translated && line.translated !== atCreation.lines[idx]?.translated
+      })
+      if (changed.length > 0) result.set(file.translatedPath, changed)
+    }
+    return result
+  }, [gridFiles, translationFilesAtCreation])
+
+  const { countsByFile, reviewedLineNumbersByFile, toggleReviewed } = useQaReviewedLines(branch, changedLinesByFile)
+
+  const selectedReviewedLineNumbers =
+    (selectedFile && reviewedLineNumbersByFile.get(selectedFile.translatedPath)) ?? new Set<number>()
+
   return (
     <div className="flex flex-row">
       <TranslationSidePanel
@@ -262,13 +286,28 @@ export const ReviewTranslationView = () => {
         categories={filesByCategory}
         onSelected={setSelectedFile}
         selected={selectedFile}
-        renderFileDecoration={(file) =>
-          file.hasChanges ? (
-            <div className="text-success">
-              <DifferenceIcon />
+        renderFileDecoration={(file) => {
+          const progress = countsByFile.get(file.translatedPath)
+          return (
+            <div className="ml-auto flex items-center gap-2">
+              {progress && progress.total > 0 && (
+                <span
+                  className={`badge badge-sm tabular-nums ${
+                    progress.reviewed >= progress.total ? 'badge-success' : 'badge-ghost'
+                  }`}
+                  title="Lignes relues (suivi personnel, local)"
+                >
+                  {progress.reviewed}/{progress.total}
+                </span>
+              )}
+              {file.hasChanges && (
+                <div className="text-success">
+                  <DifferenceIcon />
+                </div>
+              )}
             </div>
-          ) : null
-        }
+          )
+        }}
         footer={
           <>
             <LaunchGameButton
@@ -378,6 +417,8 @@ export const ReviewTranslationView = () => {
               matchLanguage={matchLanguage}
               onRowDataChanged={setRowData}
               stringSearchResult={stringSearchResult}
+              reviewedLineNumbers={selectedReviewedLineNumbers}
+              onToggleReviewed={(line) => selectedFile && toggleReviewed(selectedFile.translatedPath, line)}
             />
           </div>
         )}

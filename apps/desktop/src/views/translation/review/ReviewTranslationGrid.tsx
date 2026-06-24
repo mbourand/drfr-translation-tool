@@ -28,6 +28,9 @@ type TranslationGridProps = {
   onCellFocused: (event: CellFocusedEvent<Line, any>) => void
   onRowDataChanged: (value: Line[]) => void
   stringSearchResult: StringSearchResult | null
+  /** Changed line numbers the current user has locally marked "already read" (personal, not synced). */
+  reviewedLineNumbers: Set<number>
+  onToggleReviewed: (line: Line) => void
 }
 
 const LANGUAGE_COLUMNS = {
@@ -50,7 +53,9 @@ export const ReviewTranslationGrid = ({
   showAllLines,
   onRowDataChanged,
   stringSearchResult,
-  matchLanguage
+  matchLanguage,
+  reviewedLineNumbers,
+  onToggleReviewed
 }: TranslationGridProps) => {
   const gridApi = useRef<GridApi | null>(null)
   const [selectedChangedLine, setSelectedChangedLine] = useState<Line | null>(null)
@@ -70,6 +75,12 @@ export const ReviewTranslationGrid = ({
     gridApi.current.ensureIndexVisible(rowNode.rowIndex, 'middle')
     lineToFocus.current = null
   }, [selectedChangedLine?.lineNumber])
+
+  // Reviewed marks live outside the row data; when they change, refresh just the checkbox column so the
+  // boxes reflect the latest state (ag-grid won't re-run the cell renderer on its own).
+  useEffect(() => {
+    gridApi.current?.refreshCells({ force: true, columns: ['reviewed'] })
+  }, [reviewedLineNumbers])
 
   const checkRowVisibility = (api: GridApi) => {
     if (selectedChangedLine == null) return
@@ -176,6 +187,26 @@ export const ReviewTranslationGrid = ({
     )
   }
 
+  // Personal "I've already read this line" checkbox, only offered on the lines actually under review
+  // (the same changed lines that get the comment / expand controls). Local-only, no workflow impact.
+  const reviewedCellRenderer = (params: ICellRendererParams<Line>) => {
+    if (!params.data || lineNumbersToShow.get(params.data.lineNumber) !== true) return null
+    const line = params.data
+    return (
+      <label
+        className="flex items-center justify-center h-full cursor-pointer"
+        title="J'ai déjà relu cette ligne (suivi personnel, local)"
+      >
+        <input
+          type="checkbox"
+          className="checkbox checkbox-sm"
+          checked={reviewedLineNumbers.has(line.lineNumber)}
+          onChange={() => onToggleReviewed(line)}
+        />
+      </label>
+    )
+  }
+
   return (
     <AgGridReact
       animateRows={false}
@@ -232,6 +263,14 @@ export const ReviewTranslationGrid = ({
           cellEditor: editable ? 'agTextCellEditor' : undefined,
           onCellValueChanged: editable ? onLineEdited : undefined,
           cellRenderer: customCellRenderer
+        },
+        {
+          colId: 'reviewed',
+          headerName: 'Relu',
+          width: 80,
+          sortable: false,
+          cellClass: 'leading-6!',
+          cellRenderer: reviewedCellRenderer
         }
       ]}
     />
