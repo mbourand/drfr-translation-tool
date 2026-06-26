@@ -1,4 +1,4 @@
-import { MutableRefObject, useEffect, useState } from 'react'
+import { DragEvent, MutableRefObject, useEffect, useState } from 'react'
 import { z } from 'zod'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readFile } from '@tauri-apps/plugin-fs'
@@ -104,6 +104,7 @@ export const LineCommentThread = ({
   // keeps it alive across cell-renderer remounts (same pattern as the text draft in `answersRef`).
   const [screenshot, setScreenshot] = useState<Blob | null>(() => screenshotsRef.current.get(lineNumber) ?? null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [isDraggingOver, setIsDraggingOver] = useState(false)
 
   useEffect(() => {
     if (!screenshot) {
@@ -145,6 +146,29 @@ export const LineCommentThread = ({
     if (blob) stageScreenshot(blob)
   }
 
+  // Drag-and-drop staging. `dragDropEnabled: false` in `tauri.conf.json` disables Tauri's native
+  // webview file-drop interception, so the browser's HTML5 DOM drop events fire here with real `File`
+  // objects (which are `Blob`s) — letting a dropped image flow into the same staging path as the
+  // picker and clipboard.
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsDraggingOver(true)
+  }
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    // Ignore leave events fired while moving between the box's own children, so the highlight doesn't flicker.
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+    setIsDraggingOver(false)
+  }
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsDraggingOver(false)
+    // Stage the first dropped image; non-image drops are rejected without staging.
+    const image = Array.from(e.dataTransfer.files).find((file) => file.type.startsWith('image/'))
+    if (image) stageScreenshot(image)
+  }
+
   const clearAnswer = () => {
     answersRef.current.delete(lineNumber)
     const textArea = textAreaRefsMap.current.get(lineNumber)
@@ -163,8 +187,13 @@ export const LineCommentThread = ({
 
   return (
     <div
-      className="flex flex-col border-2 rounded-md border-base-content/10 mt-4 gap-2 mb-2 bg-base-100"
+      className={`flex flex-col border-2 rounded-md mt-4 gap-2 mb-2 bg-base-100 transition-colors ${
+        isDraggingOver ? 'border-primary border-dashed bg-primary/5' : 'border-base-content/10'
+      }`}
       onDoubleClickCapture={(e) => e.stopPropagation()}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
       <div className="flex justify-between px-2 pt-2">
         <h2 className="font-bold text-lg">Commentaires</h2>
