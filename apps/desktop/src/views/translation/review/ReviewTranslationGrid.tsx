@@ -18,7 +18,7 @@ type TranslationGridProps = {
   onReady?: (event: GridReadyEvent<Line>) => void
   matchLanguage: MatchLanguages
   comments: z.infer<ReturnType<(typeof TRANSLATION_API_URLS)['TRANSLATIONS']['LIST_COMMENTS']>['responseSchema']>
-  onSendComment: (params: { body: string; line: number; inReplyTo?: number; screenshot?: Blob }) => void
+  onSendComment: (params: { body: string; line: number; inReplyTo?: number; screenshots?: Blob[] }) => Promise<unknown>
   onDeleteCommentClicked: (params: { commentId: number; pullRequestNumber: number }) => void
   userLogin: string
   conflictedLinesNumber: number[]
@@ -65,9 +65,9 @@ export const ReviewTranslationGrid = ({
 
   const commentAnswers = useRef(new Map<number, string>())
   const textAreaRefs = useRef(new Map<number, HTMLTextAreaElement | null>())
-  // Staged-but-unsent screenshots, keyed by line, held here (like the text drafts) so they survive the
-  // cell renderer being torn down and recreated as the grid scrolls.
-  const commentScreenshots = useRef(new Map<number, Blob>())
+  // Staged-but-unsent screenshots (up to 10 per line), keyed by line and held here like the text drafts
+  // so they survive the cell renderer being torn down and recreated as the grid scrolls.
+  const commentScreenshots = useRef(new Map<number, Blob[]>())
 
   const [addCommentToLine, setAddCommentToLine] = useState<number | null>(null)
 

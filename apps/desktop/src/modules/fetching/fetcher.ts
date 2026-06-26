@@ -23,7 +23,10 @@ const toFormData = (body: Record<string, unknown>): FormData => {
   const formData = new FormData()
   for (const [key, value] of Object.entries(body)) {
     if (value === undefined || value === null) continue
-    formData.append(key, value instanceof Blob ? value : String(value))
+    // An array value becomes repeated parts under the same key — e.g. several screenshots all sent as
+    // `screenshots` file parts, which the backend's `AnyFilesInterceptor` collects into one array.
+    const parts = Array.isArray(value) ? value : [value]
+    for (const part of parts) formData.append(key, part instanceof Blob ? part : String(part))
   }
   return formData
 }

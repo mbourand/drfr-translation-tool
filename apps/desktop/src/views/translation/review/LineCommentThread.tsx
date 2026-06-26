@@ -13,6 +13,10 @@ export const RESOLVED_COMMENT = '[RESOLVED]'
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
 
+/** Client-side staging guards, mirroring the backend's Multer hard limits so the user gets instant feedback. */
+const MAX_SCREENSHOTS = 10
+const MAX_SCREENSHOT_BYTES = 15 * 1024 * 1024
+
 // Read an image off the OS clipboard via the Tauri plugin (`readImage`) rather than the DOM `paste`
 // event, chosen for reliable Linux/WebKitGTK support. The plugin only exposes raw RGBA pixels, so we
 // re-encode them to a PNG blob the backend (`sharp`) can decode — flowing into the same staging path
@@ -79,8 +83,8 @@ type LineCommentThreadProps = {
   isAddingNewComment: boolean
   answersRef: MutableRefObject<Map<number, string>>
   textAreaRefsMap: MutableRefObject<Map<number, HTMLTextAreaElement | null>>
-  screenshotsRef: MutableRefObject<Map<number, Blob>>
-  onSendComment: (params: { body: string; line: number; inReplyTo?: number; screenshot?: Blob }) => void
+  screenshotsRef: MutableRefObject<Map<number, Blob[]>>
+  onSendComment: (params: { body: string; line: number; inReplyTo?: number; screenshots?: Blob[] }) => Promise<unknown>
   onDeleteComment: (params: { commentId: number; pullRequestNumber: number }) => void
   onCancelAdd: () => void
 }
@@ -100,50 +104,91 @@ export const LineCommentThread = ({
   const lastCommentId = lineComments[lineComments.length - 1]?.id
   const replyTarget = isAddingNewComment ? undefined : lastCommentId
 
-  // Mirror the parent-held staged screenshot into local state so the thumbnail re-renders, while the ref
-  // keeps it alive across cell-renderer remounts (same pattern as the text draft in `answersRef`).
-  const [screenshot, setScreenshot] = useState<Blob | null>(() => screenshotsRef.current.get(lineNumber) ?? null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  // Mirror the parent-held staged screenshots into local state so the strip re-renders, while the ref
+  // keeps them alive across cell-renderer remounts (same pattern as the text draft in `answersRef`).
+  const [screenshots, setScreenshots] = useState<Blob[]>(() => screenshotsRef.current.get(lineNumber) ?? [])
+  const [previewUrls, setPreviewUrls] = useState<string[]>([])
   const [isDraggingOver, setIsDraggingOver] = useState(false)
+  const [isSending, setIsSending] = useState(false)
+  // A transient, auto-dismissing message for the staging guards (too large / too many / wrong type).
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!screenshot) {
-      setPreviewUrl(null)
-      return
-    }
-    const url = URL.createObjectURL(screenshot)
-    setPreviewUrl(url)
-    return () => URL.revokeObjectURL(url)
-  }, [screenshot])
+    const urls = screenshots.map((blob) => URL.createObjectURL(blob))
+    setPreviewUrls(urls)
+    return () => urls.forEach((url) => URL.revokeObjectURL(url))
+  }, [screenshots])
 
-  const stageScreenshot = (blob: Blob) => {
-    screenshotsRef.current.set(lineNumber, blob)
-    setScreenshot(blob)
+  useEffect(() => {
+    if (!error) return
+    const timeout = setTimeout(() => setError(null), 4000)
+    return () => clearTimeout(timeout)
+  }, [error])
+
+  // The single funnel every input (picker, clipboard, drag-drop) hands its blobs to. Applies the three
+  // client-side guards — reject non-images, reject anything over 15 MB, and cap the strip at 10 — giving
+  // instant feedback before anything is sent. The ref is the source of truth across remounts.
+  const stageScreenshots = (blobs: Blob[]) => {
+    const current = screenshotsRef.current.get(lineNumber) ?? []
+    const accepted: Blob[] = []
+    for (const blob of blobs) {
+      if (!blob.type.startsWith('image/')) continue // non-image inputs are rejected without staging
+      if (blob.size > MAX_SCREENSHOT_BYTES) {
+        setError('Une image dépasse la taille maximale de 15 Mo et a été ignorée.')
+        continue
+      }
+      if (current.length + accepted.length >= MAX_SCREENSHOTS) {
+        setError(`Vous ne pouvez pas joindre plus de ${MAX_SCREENSHOTS} captures par commentaire.`)
+        break
+      }
+      accepted.push(blob)
+    }
+    if (accepted.length === 0) return
+    const next = [...current, ...accepted]
+    screenshotsRef.current.set(lineNumber, next)
+    setScreenshots(next)
   }
 
-  const clearScreenshot = () => {
+  const removeScreenshot = (index: number) => {
+    const next = screenshots.filter((_, i) => i !== index)
+    if (next.length === 0) screenshotsRef.current.delete(lineNumber)
+    else screenshotsRef.current.set(lineNumber, next)
+    setScreenshots(next)
+  }
+
+  const clearScreenshots = () => {
     screenshotsRef.current.delete(lineNumber)
-    setScreenshot(null)
+    setScreenshots([])
   }
 
   const pickScreenshot = async () => {
     const selected = await open({
-      multiple: false,
+      multiple: true,
       directory: false,
       filters: [{ name: 'Images', extensions: IMAGE_EXTENSIONS }]
     })
-    if (typeof selected !== 'string') return
-    const bytes = await readFile(selected)
-    // `readFile` types its result as `Uint8Array<ArrayBufferLike>`, which the DOM `Blob` ctor won't accept
-    // directly; the bytes are a plain owned buffer, so this widening to `BlobPart` is safe.
-    stageScreenshot(new Blob([bytes as unknown as BlobPart]))
+    if (selected === null) return
+    const paths = Array.isArray(selected) ? selected : [selected]
+    const blobs = await Promise.all(
+      paths.map(async (path) => {
+        const bytes = await readFile(path)
+        // The dialog filters to image extensions, so deriving the MIME type from the extension is safe and
+        // lets the shared `image/*` guard accept these blobs uniformly with clipboard/drag-drop inputs.
+        const extension = path.split('.').pop()?.toLowerCase() ?? ''
+        const mimeType = extension === 'jpg' ? 'image/jpeg' : `image/${extension}`
+        // `readFile` types its result as `Uint8Array<ArrayBufferLike>`, which the DOM `Blob` ctor won't
+        // accept directly; the bytes are a plain owned buffer, so this widening to `BlobPart` is safe.
+        return new Blob([bytes as unknown as BlobPart], { type: mimeType })
+      })
+    )
+    stageScreenshots(blobs)
   }
 
   // Ctrl+V in the comment box: stage any clipboard image as a thumbnail. A text-only clipboard yields
   // null, so the textarea's default paste still inserts the text normally.
   const pasteScreenshot = async () => {
     const blob = await readClipboardImage()
-    if (blob) stageScreenshot(blob)
+    if (blob) stageScreenshots([blob])
   }
 
   // Drag-and-drop staging. `dragDropEnabled: false` in `tauri.conf.json` disables Tauri's native
@@ -164,9 +209,8 @@ export const LineCommentThread = ({
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     setIsDraggingOver(false)
-    // Stage the first dropped image; non-image drops are rejected without staging.
-    const image = Array.from(e.dataTransfer.files).find((file) => file.type.startsWith('image/'))
-    if (image) stageScreenshot(image)
+    // Funnel every dropped file through the shared staging guard, which keeps the images and rejects the rest.
+    stageScreenshots(Array.from(e.dataTransfer.files))
   }
 
   const clearAnswer = () => {
@@ -175,14 +219,23 @@ export const LineCommentThread = ({
     if (textArea) textArea.value = ''
   }
 
-  const send = () => {
+  const send = async () => {
     const body = answersRef.current.get(lineNumber) ?? ''
-    const staged = screenshot
-    clearAnswer()
-    if (body.trim() === '' && !staged) return
-    clearScreenshot()
-    onCancelAdd()
-    onSendComment({ body, line: lineNumber + 1, inReplyTo: replyTarget, screenshot: staged ?? undefined })
+    if (body.trim() === '' && screenshots.length === 0) return
+    // While the multipart request is in flight, the send control is disabled and shows progress.
+    setIsSending(true)
+    try {
+      await onSendComment({ body, line: lineNumber + 1, inReplyTo: replyTarget, screenshots })
+      // Success: drop the draft and the staged strip, and collapse the input.
+      clearAnswer()
+      clearScreenshots()
+      onCancelAdd()
+    } catch {
+      // Failure: keep the staged screenshots (and text) so the user can retry without re-adding them.
+      setError("L'envoi a échoué. Vos captures sont conservées, vous pouvez réessayer.")
+    } finally {
+      setIsSending(false)
+    }
   }
 
   return (
@@ -200,11 +253,11 @@ export const LineCommentThread = ({
         <button
           onClick={() => {
             onCancelAdd()
-            onSendComment({
-              body: RESOLVED_COMMENT,
-              line: lineNumber + 1,
-              inReplyTo: replyTarget
-            })
+            // Resolve sends zero screenshots; the staging UI is irrelevant here. Swallow rejections so a
+            // failed resolve doesn't surface as an unhandled promise.
+            void onSendComment({ body: RESOLVED_COMMENT, line: lineNumber + 1, inReplyTo: replyTarget }).catch(
+              () => {}
+            )
           }}
           className="btn btn-sm btn-soft"
         >
@@ -251,22 +304,29 @@ export const LineCommentThread = ({
           placeholder={isAddingNewComment ? 'Ajouter un commentaire...' : 'Répondre...'}
           defaultValue={answersRef.current.get(lineNumber) || ''}
         />
-        {previewUrl && (
+        {previewUrls.length > 0 && (
           <div className="self-start flex flex-wrap gap-2">
-            <div className="relative">
-              <img
-                src={previewUrl}
-                alt="Capture d'écran à envoyer"
-                className="max-h-28 rounded-md border border-base-content/10"
-              />
-              <button
-                onClick={clearScreenshot}
-                className="btn btn-circle btn-xs btn-error absolute -top-2 -right-2 p-0.5"
-                aria-label="Retirer la capture"
-              >
-                <CrossIcon />
-              </button>
-            </div>
+            {previewUrls.map((url, index) => (
+              <div key={url} className="relative">
+                <img
+                  src={url}
+                  alt="Capture d'écran à envoyer"
+                  className="max-h-28 rounded-md border border-base-content/10"
+                />
+                <button
+                  onClick={() => removeScreenshot(index)}
+                  className="btn btn-circle btn-xs btn-error absolute -top-2 -right-2 p-0.5"
+                  aria-label="Retirer la capture"
+                >
+                  <CrossIcon />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {error && (
+          <div role="alert" className="alert alert-error alert-soft self-stretch py-2 text-sm">
+            <span>{error}</span>
           </div>
         )}
         <div className="flex gap-2">
@@ -276,18 +336,32 @@ export const LineCommentThread = ({
               onClick={() => {
                 onCancelAdd()
                 clearAnswer()
-                clearScreenshot()
+                clearScreenshots()
               }}
             >
               Annuler
             </button>
           )}
-          <button onClick={pickScreenshot} className="btn btn-sm btn-soft" aria-label="Joindre une capture d'écran">
+          <button
+            onClick={pickScreenshot}
+            disabled={isSending}
+            className="btn btn-sm btn-soft"
+            aria-label="Joindre une capture d'écran"
+          >
             <ImageIcon />
           </button>
-          <button onClick={send} className="btn btn-sm btn-primary">
-            <p className="h-fit">Envoyer</p>
-            <SendIcon />
+          <button onClick={send} disabled={isSending} className="btn btn-sm btn-primary">
+            {isSending ? (
+              <>
+                <span className="loading loading-spinner loading-xs" />
+                <p className="h-fit">Envoi…</p>
+              </>
+            ) : (
+              <>
+                <p className="h-fit">Envoyer</p>
+                <SendIcon />
+              </>
+            )}
           </button>
         </div>
       </div>

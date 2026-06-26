@@ -132,8 +132,9 @@ export const TRANSLATION_API_URLS = {
         body: z.string(),
         filePath: z.string(),
         inReplyTo: z.number().optional(),
-        // Optional attached screenshot, sent as a multipart file part; the backend re-encodes and embeds it.
-        screenshot: z.instanceof(Blob).optional()
+        // Up to 10 attached screenshots, each sent as a multipart file part; the backend re-encodes,
+        // stores, and appends one Markdown image per file to the comment body in this order.
+        screenshots: z.array(z.instanceof(Blob)).optional()
       }),
       responseSchema: z.object({
         success: z.boolean()

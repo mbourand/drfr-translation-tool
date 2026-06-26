@@ -130,7 +130,7 @@ export const ReviewTranslationView = () => {
       body,
       inReplyTo,
       filePath,
-      screenshot
+      screenshots
     }: z.infer<typeof TRANSLATION_API_URLS.TRANSLATIONS.ADD_COMMENT.bodySchema>) => {
       if (!branch) throw new Error('No branch provided')
 
@@ -142,7 +142,7 @@ export const ReviewTranslationView = () => {
           body,
           line,
           inReplyTo,
-          screenshot
+          screenshots
         }
       })
 
@@ -406,16 +406,18 @@ export const ReviewTranslationView = () => {
               changedLineNumbers={changedLines}
               conflictedLinesNumber={conflictedLines}
               onReady={(e) => setGridApi(e.api)}
-              onSendComment={({ line, body, inReplyTo, screenshot }) => {
-                sendComment.mutate({
+              onSendComment={({ line, body, inReplyTo, screenshots }) =>
+                // `mutateAsync` so the comment box can await the result: keep the staged screenshots on
+                // failure (for retry) and clear them only on success.
+                sendComment.mutateAsync({
                   line,
                   body,
                   branch: branch ?? '',
                   filePath: selectedFile.translatedPath,
                   inReplyTo: inReplyTo ?? undefined,
-                  screenshot
+                  screenshots
                 })
-              }}
+              }
               onDeleteCommentClicked={(params) => deleteComments.mutate(params)}
               matchLanguage={matchLanguage}
               onRowDataChanged={setRowData}

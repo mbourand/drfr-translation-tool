@@ -1,10 +1,13 @@
-import { Cache } from '@nestjs/cache-manager'
+import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager'
+import { INestApplication } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import { Test } from '@nestjs/testing'
 import { Request } from 'express'
 import { readFile, readdir, rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import sharp from 'sharp'
+import request from 'supertest'
 import { EnvironmentVariables } from '@/env'
 import { GithubHttpService } from '@/github/http.service'
 import { ProgressionService } from '@/progression/progression.service'
@@ -170,6 +173,29 @@ describe('TranslationController.postComment (multipart form fields)', () => {
     expect(meta.height).toBe(400)
   })
 
+  it('stores every screenshot and appends one Markdown URL per image in staging order', async () => {
+    const [first, second] = await Promise.all([makeOversizeImage(), makeOversizeImage()])
+
+    await makeController().postComment(
+      req,
+      { branch: 'feat/x', body: 'Deux captures', line: '5', filePath: 'data/x.json' },
+      [{ buffer: first }, { buffer: second }]
+    )
+
+    const body = postedBodyFor('review-url').comments[0].body
+    const urls = [...body.matchAll(/!\[\]\(([^)]+)\)/g)].map((match) => match[1])
+    // One token per image, both under the PR's prefix, in input order, and distinct (unique uuids).
+    expect(urls).toHaveLength(2)
+    expect(urls[0]).not.toBe(urls[1])
+    expect(body).toMatch(/^Deux captures\n\n!\[\]\([^)]+\)\n!\[\]\([^)]+\)$/)
+
+    for (const url of urls) {
+      expect(url).toMatch(/https:\/\/back\.example\.com\/screenshots\/pr-42\/[0-9a-f-]+\.webp/)
+      const meta = await sharp(await readFile(join(screenshotsDir, 'pr-42', url.split('/').pop()!))).metadata()
+      expect(meta.format).toBe('webp')
+    }
+  })
+
   it('carries a screenshot through the reply path with the body assembled identically', async () => {
     const buffer = await makeOversizeImage()
 
@@ -212,5 +238,69 @@ describe('TranslationController.postComment (multipart form fields)', () => {
     const entries = await readdir(screenshotsDir).catch(() => [] as string[])
     expect(entries).not.toContain('pr-42')
     expect(postedBodyFor('review-url').comments[0].body).toBe('Pas de capture')
+  })
+})
+
+// The oversize / too-many guards live in the Multer interceptor, which only runs in the real HTTP
+// pipeline (not when the handler is called directly), so these go through a booted Nest app. The point
+// is that Multer rejects *before* the handler — no PR is resolved and nothing is posted to GitHub.
+describe('TranslationController.postComment (Multer hard limits, over HTTP)', () => {
+  let app: INestApplication
+  const githubHttpService = { request: jest.fn(), fetch: jest.fn() }
+  const pullRequestsService = { forBranch: jest.fn() }
+
+  const post = () =>
+    request(app.getHttpServer())
+      .post('/translation/comment')
+      .field('branch', 'feat/x')
+      .field('body', 'Cette ligne déborde')
+      .field('line', '5')
+      .field('filePath', 'data/x.json')
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [TranslationController],
+      providers: [
+        { provide: RoutesService, useValue: { GITHUB_ROUTES: {} } },
+        { provide: ConfigService, useValue: { getOrThrow: () => '' } },
+        { provide: GithubHttpService, useValue: githubHttpService },
+        { provide: ProgressionService, useValue: new ProgressionService() },
+        { provide: RepositoryContext, useValue: { owner: 'owner', name: 'repo', mainBranch: 'main' } },
+        { provide: PullRequestsService, useValue: pullRequestsService },
+        { provide: ScreenshotsService, useValue: { store: jest.fn().mockResolvedValue([]) } },
+        { provide: CACHE_MANAGER, useValue: { del: jest.fn(), get: jest.fn(), set: jest.fn() } }
+      ]
+    }).compile()
+    app = moduleRef.createNestApplication()
+    await app.init()
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    pullRequestsService.forBranch.mockResolvedValue({ number: 42 })
+    githubHttpService.request.mockResolvedValue({ sha: 'abc123' })
+  })
+
+  it('rejects a file over 15 MB with 413 without posting a comment', async () => {
+    await post()
+      .attach('screenshots', Buffer.alloc(16 * 1024 * 1024), { filename: 'big.png', contentType: 'image/png' })
+      .expect(413)
+
+    expect(pullRequestsService.forBranch).not.toHaveBeenCalled()
+    expect(githubHttpService.request).not.toHaveBeenCalled()
+  })
+
+  it('rejects more than 10 files with 400 without posting a comment', async () => {
+    const req = post()
+    for (let i = 0; i < 11; i++)
+      req.attach('screenshots', Buffer.from('x'), { filename: `s${i}.png`, contentType: 'image/png' })
+    await req.expect(400)
+
+    expect(pullRequestsService.forBranch).not.toHaveBeenCalled()
+    expect(githubHttpService.request).not.toHaveBeenCalled()
   })
 })
