@@ -8,6 +8,7 @@ import { SendIcon } from '../../../components/icons/SendIcon'
 import { TrashIcon } from '../../../components/icons/TrashIcon'
 import { ImageIcon } from '../../../components/icons/ImageIcon'
 import { CrossIcon } from '../../../components/icons/CrossIcon'
+import { Lightbox } from '../../../components/Lightbox'
 
 export const RESOLVED_COMMENT = '[RESOLVED]'
 
@@ -55,21 +56,32 @@ const extractScreenshots = (body: string): { text: string; screenshotUrls: strin
 /** Renders a posted comment body: its text, followed by any embedded screenshots as a thumbnail strip. */
 const CommentBody = ({ body }: { body: string }) => {
   const { text, screenshotUrls } = extractScreenshots(body)
+  // The screenshot currently enlarged in the lightbox, or null when the lightbox is closed. Clicking a
+  // thumbnail opens it; this is display-only and never touches the comment body or storage.
+  const [enlargedUrl, setEnlargedUrl] = useState<string | null>(null)
   return (
     <>
       {text !== '' && <p className="ml-4">{text}</p>}
       {screenshotUrls.length > 0 && (
         <div className="ml-4 flex flex-wrap gap-2">
           {screenshotUrls.map((url) => (
-            <img
+            <button
               key={url}
-              src={url}
-              alt="Capture d'écran"
-              className="max-h-40 rounded-md border border-base-content/10"
-            />
+              type="button"
+              onClick={() => setEnlargedUrl(url)}
+              className="cursor-zoom-in"
+              aria-label="Agrandir la capture d'écran"
+            >
+              <img
+                src={url}
+                alt="Capture d'écran"
+                className="max-h-40 rounded-md border border-base-content/10"
+              />
+            </button>
           ))}
         </div>
       )}
+      <Lightbox src={enlargedUrl} onClose={() => setEnlargedUrl(null)} />
     </>
   )
 }
