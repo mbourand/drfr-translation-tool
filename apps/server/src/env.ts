@@ -23,6 +23,10 @@ export class EnvironmentVariables {
   @IsString() TRANSLATION_APPROVED_LABEL_NAME: string
   @IsString() TRANSLATION_REVIEWED_LABEL_NAME: string
 
+  // Screenshots (comment image attachments)
+  @IsString() SCREENSHOTS_DIR: string
+  @IsString() SCREENSHOTS_PUBLIC_BASE_URL: string
+
   // Smee for local development
   @IsString() @Transform(isTrue) ENABLE_SMEE: boolean
   @IsString() SMEE_GITHUB_WEBHOOK_SOURCE_URL: string

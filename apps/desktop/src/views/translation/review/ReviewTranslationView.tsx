@@ -129,7 +129,8 @@ export const ReviewTranslationView = () => {
       line,
       body,
       inReplyTo,
-      filePath
+      filePath,
+      screenshot
     }: z.infer<typeof TRANSLATION_API_URLS.TRANSLATIONS.ADD_COMMENT.bodySchema>) => {
       if (!branch) throw new Error('No branch provided')
 
@@ -140,7 +141,8 @@ export const ReviewTranslationView = () => {
           filePath,
           body,
           line,
-          inReplyTo
+          inReplyTo,
+          screenshot
         }
       })
 
@@ -404,13 +406,14 @@ export const ReviewTranslationView = () => {
               changedLineNumbers={changedLines}
               conflictedLinesNumber={conflictedLines}
               onReady={(e) => setGridApi(e.api)}
-              onSendComment={({ line, body, inReplyTo }) => {
+              onSendComment={({ line, body, inReplyTo, screenshot }) => {
                 sendComment.mutate({
                   line,
                   body,
                   branch: branch ?? '',
                   filePath: selectedFile.translatedPath,
-                  inReplyTo: inReplyTo ?? undefined
+                  inReplyTo: inReplyTo ?? undefined,
+                  screenshot
                 })
               }}
               onDeleteCommentClicked={(params) => deleteComments.mutate(params)}

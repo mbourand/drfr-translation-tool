@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common'
+import { ConfigModule, ConfigService } from '@nestjs/config'
+import { ServeStaticModule } from '@nestjs/serve-static'
+import { resolve } from 'path'
 import { AppController } from './app.controller'
 import { AppService } from './app.service'
 import { AuthModule } from './auth/auth.module'
-import { ConfigModule } from '@nestjs/config'
 import { SmeeModule } from './smee/smee.module'
 import { RoutesModule } from './routes/routes.module'
 import { plainToInstance } from 'class-transformer'
@@ -18,6 +20,18 @@ import { BetaReviewsModule } from './beta-reviews/beta-reviews.module'
     ConfigModule.forRoot({
       isGlobal: true,
       validate: (config) => plainToInstance(EnvironmentVariables, config)
+    }),
+    // Serve stored screenshots publicly (no auth) at `/screenshots/...` so GitHub's Camo proxy and the
+    // desktop app can load them. Filenames are content-unique, so responses are safely immutable for a year.
+    ServeStaticModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService<EnvironmentVariables>) => [
+        {
+          rootPath: resolve(configService.getOrThrow('SCREENSHOTS_DIR', { infer: true })),
+          serveRoot: '/screenshots',
+          serveStaticOptions: { index: false, immutable: true, maxAge: '1y' }
+        }
+      ]
     }),
     CacheModule.register({ isGlobal: true }),
     PrismaModule,

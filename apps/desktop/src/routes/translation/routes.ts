@@ -131,7 +131,9 @@ export const TRANSLATION_API_URLS = {
         line: z.number(),
         body: z.string(),
         filePath: z.string(),
-        inReplyTo: z.number().optional()
+        inReplyTo: z.number().optional(),
+        // Optional attached screenshot, sent as a multipart file part; the backend re-encodes and embeds it.
+        screenshot: z.instanceof(Blob).optional()
       }),
       responseSchema: z.object({
         success: z.boolean()
