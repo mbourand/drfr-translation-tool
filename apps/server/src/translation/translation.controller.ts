@@ -10,9 +10,11 @@ import {
   Post,
   Query,
   Req,
-  UseGuards
+  UseGuards,
+  UseInterceptors
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import { AnyFilesInterceptor } from '@nestjs/platform-express'
 import { Type } from 'class-transformer'
 import { IsArray, IsString, ValidateNested } from 'class-validator'
 import { Request } from 'express'
@@ -515,12 +517,19 @@ export class TranslationController {
     return mappedComments
   }
 
+  // Consumes `multipart/form-data` (not JSON): the comment fields arrive as form fields and screenshot
+  // file parts will be added by later slices. `AnyFilesInterceptor` parses the multipart body; no files
+  // are read yet. Form fields are always strings, so `line`/`inReplyTo` are coerced back to numbers.
   @Post('/comment')
+  @UseInterceptors(AnyFilesInterceptor())
   async postComment(
     @Req() req: Request,
-    @Body() body: { branch: string; body: string; line: number; filePath: string; inReplyTo?: number }
+    @Body() body: { branch: string; body: string; line: string; filePath: string; inReplyTo?: string }
   ) {
     const { owner: repositoryOwner, name: repositoryName } = this.repositoryContext
+
+    const line = Number(body.line)
+    const inReplyTo = body.inReplyTo ? Number(body.inReplyTo) : undefined
 
     const pullRequest = await this.pullRequestsService.forBranch(body.branch, {
       authorization: req.headers.authorization
@@ -532,7 +541,7 @@ export class TranslationController {
       { authorization: req.headers.authorization, operation: 'retrieve last commit' }
     )
 
-    if (body.inReplyTo) {
+    if (inReplyTo) {
       await this.githubHttpService.request(
         this.routeService.GITHUB_ROUTES.ADD_COMMENT(repositoryOwner, repositoryName, pullRequestNumber),
         {
@@ -543,9 +552,9 @@ export class TranslationController {
             commit_id: lastCommit.sha,
             path: body.filePath,
             side: 'RIGHT',
-            line: body.line,
+            line,
             subject_type: 'line',
-            in_reply_to: body.inReplyTo
+            in_reply_to: inReplyTo
           },
           operation: 'post comment'
         }
@@ -564,7 +573,7 @@ export class TranslationController {
               {
                 path: body.filePath,
                 body: body.body,
-                line: body.line,
+                line,
                 side: 'RIGHT'
               }
             ]

@@ -125,6 +125,7 @@ export const TRANSLATION_API_URLS = {
     ADD_COMMENT: {
       url: `${ENV.TRANSLATION_API_BASE_URL}/translation/comment`,
       method: 'POST',
+      encoding: 'multipart',
       bodySchema: z.object({
         branch: z.string(),
         line: z.number(),
