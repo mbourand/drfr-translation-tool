@@ -10,9 +10,12 @@ import {
   Post,
   Query,
   Req,
-  UseGuards
+  UploadedFiles,
+  UseGuards,
+  UseInterceptors
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import { AnyFilesInterceptor } from '@nestjs/platform-express'
 import { Type } from 'class-transformer'
 import { IsArray, IsString, ValidateNested } from 'class-validator'
 import { Request } from 'express'
@@ -25,8 +28,13 @@ import { RepositoryContext } from '@/repository/repository.context'
 import { RoutesService } from '@/routes/routes.service'
 import { isEligibleQaReviewer } from './qa-eligibility'
 import { PullRequestsService } from './pull-requests.service'
+import { ScreenshotsService, UploadedImage } from './screenshots.service'
 import { ReviewSignoffs } from './review-signoffs'
 import { translationFiles } from './translation-files'
+
+/** Hard upload limits Multer rejects before the handler runs: 15 MB/file (→ 413) and 10 files/comment (→ 400). */
+const MAX_SCREENSHOT_BYTES = 15 * 1024 * 1024
+const MAX_SCREENSHOTS = 10
 
 class CreateTranslationDto {
   // @IsString()
@@ -70,6 +78,7 @@ export class TranslationController {
     private readonly progressionService: ProgressionService,
     private readonly repositoryContext: RepositoryContext,
     private readonly pullRequestsService: PullRequestsService,
+    private readonly screenshotsService: ScreenshotsService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache
   ) {}
 
@@ -515,12 +524,20 @@ export class TranslationController {
     return mappedComments
   }
 
+  // Consumes `multipart/form-data` (not JSON): the comment fields arrive as form fields and any attached
+  // screenshots as file parts. Multer enforces the hard limits (max 15 MB/file → 413, max 10 files → 400)
+  // before the handler runs. Form fields are always strings, so `line`/`inReplyTo` are coerced to numbers.
   @Post('/comment')
+  @UseInterceptors(AnyFilesInterceptor({ limits: { fileSize: MAX_SCREENSHOT_BYTES, files: MAX_SCREENSHOTS } }))
   async postComment(
     @Req() req: Request,
-    @Body() body: { branch: string; body: string; line: number; filePath: string; inReplyTo?: number }
+    @Body() body: { branch: string; body: string; line: string; filePath: string; inReplyTo?: string },
+    @UploadedFiles() files: UploadedImage[] = []
   ) {
     const { owner: repositoryOwner, name: repositoryName } = this.repositoryContext
+
+    const line = Number(body.line)
+    const inReplyTo = body.inReplyTo ? Number(body.inReplyTo) : undefined
 
     const pullRequest = await this.pullRequestsService.forBranch(body.branch, {
       authorization: req.headers.authorization
@@ -532,20 +549,26 @@ export class TranslationController {
       { authorization: req.headers.authorization, operation: 'retrieve last commit' }
     )
 
-    if (body.inReplyTo) {
+    // Process & store any screenshots, then append one Markdown image per stored file to the end of the
+    // body so the comment reads as text-then-evidence and renders both in-app and natively on github.com.
+    const screenshotUrls = await this.screenshotsService.store(pullRequestNumber, files)
+    const commentBody =
+      screenshotUrls.length > 0 ? `${body.body}\n\n${screenshotUrls.map((url) => `![](${url})`).join('\n')}` : body.body
+
+    if (inReplyTo) {
       await this.githubHttpService.request(
         this.routeService.GITHUB_ROUTES.ADD_COMMENT(repositoryOwner, repositoryName, pullRequestNumber),
         {
           method: 'POST',
           authorization: req.headers.authorization,
           body: {
-            body: body.body,
+            body: commentBody,
             commit_id: lastCommit.sha,
             path: body.filePath,
             side: 'RIGHT',
-            line: body.line,
+            line,
             subject_type: 'line',
-            in_reply_to: body.inReplyTo
+            in_reply_to: inReplyTo
           },
           operation: 'post comment'
         }
@@ -563,8 +586,8 @@ export class TranslationController {
             comments: [
               {
                 path: body.filePath,
-                body: body.body,
-                line: body.line,
+                body: commentBody,
+                line,
                 side: 'RIGHT'
               }
             ]

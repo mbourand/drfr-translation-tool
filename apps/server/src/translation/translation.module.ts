@@ -8,10 +8,19 @@ import { ProgressionService } from '@/progression/progression.service'
 import { RepositoryModule } from '@/repository/repository.module'
 import { GithubAuthGuard } from '@/auth/github-auth.guard'
 import { PullRequestsService } from './pull-requests.service'
+import { ScreenshotsService } from './screenshots.service'
+import { ScreenshotsPruneService } from './screenshots-prune.service'
 
 @Module({
   controllers: [TranslationController],
-  providers: [GithubHttpService, ProgressionService, PullRequestsService, GithubAuthGuard],
+  providers: [
+    GithubHttpService,
+    ProgressionService,
+    PullRequestsService,
+    ScreenshotsService,
+    ScreenshotsPruneService,
+    GithubAuthGuard
+  ],
   imports: [HttpModule, RoutesModule, GithubModule, RepositoryModule]
 })
 export class TranslationModule {}
