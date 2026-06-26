@@ -31,4 +31,9 @@ zip-extract = "0.4.0"
 tauri-plugin-log = "2"
 tauri-plugin-oauth = "2"
 tauri-plugin-os = "2"
+# Pinned to 2.3.0 (the version already present in Cargo.lock) to stay on the locked tauri 2.7.0
+# stack; newer 2.x crates may require a newer tauri. Adding this plugin also forced tauri-runtime
+# back to 2.9.2 in the lock to match tauri-runtime-wry 2.9.3 (2.11.3 declares a trait method wry
+# 2.9.3 does not implement). The JS counterpart (package.json) tracks 2.x independently.
+tauri-plugin-clipboard-manager = "=2.3.0"
 

@@ -2,6 +2,7 @@ import { MutableRefObject, useEffect, useState } from 'react'
 import { z } from 'zod'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readFile } from '@tauri-apps/plugin-fs'
+import { readImage } from '@tauri-apps/plugin-clipboard-manager'
 import { TRANSLATION_API_URLS } from '../../../routes/translation/routes'
 import { SendIcon } from '../../../components/icons/SendIcon'
 import { TrashIcon } from '../../../components/icons/TrashIcon'
@@ -11,6 +12,28 @@ import { CrossIcon } from '../../../components/icons/CrossIcon'
 export const RESOLVED_COMMENT = '[RESOLVED]'
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
+
+// Read an image off the OS clipboard via the Tauri plugin (`readImage`) rather than the DOM `paste`
+// event, chosen for reliable Linux/WebKitGTK support. The plugin only exposes raw RGBA pixels, so we
+// re-encode them to a PNG blob the backend (`sharp`) can decode — flowing into the same staging path
+// as a picked file. Returns null when the clipboard holds no image (so a plain text paste falls
+// through untouched).
+const readClipboardImage = async (): Promise<Blob | null> => {
+  let image
+  try {
+    image = await readImage()
+  } catch {
+    return null
+  }
+  const [{ width, height }, rgba] = await Promise.all([image.size(), image.rgba()])
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
+  if (!context) return null
+  context.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0)
+  return await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+}
 
 // The tool itself appends `![](url)` tokens to a comment body on send. Minimal extraction pulls exactly
 // those tokens back out so embedded screenshots render as thumbnails while everything else stays plain text
@@ -115,6 +138,13 @@ export const LineCommentThread = ({
     stageScreenshot(new Blob([bytes as unknown as BlobPart]))
   }
 
+  // Ctrl+V in the comment box: stage any clipboard image as a thumbnail. A text-only clipboard yields
+  // null, so the textarea's default paste still inserts the text normally.
+  const pasteScreenshot = async () => {
+    const blob = await readClipboardImage()
+    if (blob) stageScreenshot(blob)
+  }
+
   const clearAnswer = () => {
     answersRef.current.delete(lineNumber)
     const textArea = textAreaRefsMap.current.get(lineNumber)
@@ -185,6 +215,7 @@ export const LineCommentThread = ({
       <div className="p-2 flex flex-col gap-2 items-end">
         <textarea
           onKeyDownCapture={(e) => e.stopPropagation()}
+          onPaste={pasteScreenshot}
           ref={(elem) => textAreaRefsMap.current.set(lineNumber, elem)}
           onChange={(e) => answersRef.current.set(lineNumber, e.target.value)}
           className="textarea w-full pr-14 "

@@ -56,6 +56,9 @@
     "fs:allow-read",
     "fs:allow-exists",
     "log:default",
-    "os:default"
+    "os:default",
+    "clipboard-manager:allow-read-image",
+    "core:image:allow-rgba",
+    "core:image:allow-size"
   ]
 }
