@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { randomUUID } from 'crypto'
-import { mkdir, writeFile } from 'fs/promises'
+import { mkdir, readdir, rm, writeFile } from 'fs/promises'
 import { join } from 'path'
 import sharp from 'sharp'
 import { EnvironmentVariables } from '@/env'
@@ -57,5 +57,22 @@ export class ScreenshotsService {
     }
 
     return urls
+  }
+
+  /**
+   * The filesystem-listing edge of the prune (test seam 2 keeps the decision pure; this stays thin):
+   * the directory names directly under the storage root, or `[]` if the root doesn't exist yet (nothing
+   * has ever been stored). Returns raw names — `selectPrunableDirs` owns which ones are `pr-<n>` dirs.
+   */
+  async listPrDirs(): Promise<string[]> {
+    const dir = this.configService.getOrThrow('SCREENSHOTS_DIR', { infer: true })
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
+    return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+  }
+
+  /** The deletion edge of the prune: remove one PR's screenshot directory and everything in it. */
+  async deletePrDir(name: string): Promise<void> {
+    const dir = this.configService.getOrThrow('SCREENSHOTS_DIR', { infer: true })
+    await rm(join(dir, name), { recursive: true, force: true })
   }
 }

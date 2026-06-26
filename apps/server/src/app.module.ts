@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 import { ConfigModule, ConfigService } from '@nestjs/config'
+import { ScheduleModule } from '@nestjs/schedule'
 import { ServeStaticModule } from '@nestjs/serve-static'
 import { resolve } from 'path'
 import { AppController } from './app.controller'
@@ -34,6 +35,7 @@ import { BetaReviewsModule } from './beta-reviews/beta-reviews.module'
       ]
     }),
     CacheModule.register({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
     SmeeModule,
