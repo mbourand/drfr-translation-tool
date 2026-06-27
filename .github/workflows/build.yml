@@ -19,12 +19,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest" # for Arm based macs (M1 and above).
-            args: "--target universal-apple-darwin"
-            utmt_asset: "UTMT_CLI_v0.8.2.0-macOS.zip"
-          - platform: "macos-latest" # for Intel based macs.
-            args: "--target x86_64-apple-darwin"
-            utmt_asset: "UTMT_CLI_v0.8.2.0-macOS.zip"
           - platform: "ubuntu-22.04" # for Tauri v1 you could replace this with ubuntu-20.04.
             # Skip the AppImage target: it runs linuxdeploy, which scans every ELF in the
             # AppDir and chokes on the bundled .NET UTMT runtime (libcoreclr.so et al.).
