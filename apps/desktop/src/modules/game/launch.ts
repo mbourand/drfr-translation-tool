@@ -27,12 +27,13 @@ type CopyDebugSavesParams = {
 export const copyDebugSaves = async ({ gitFolder, savesFolder }: CopyDebugSavesParams) => {
   const source = await path.join(gitFolder, ...DEBUG_SAVES_PATH_IN_GIT_FOLDER)
   const destination = await path.join(savesFolder, DEBUG_SAVES_DEST_FOLDER_NAME)
-  await invoke(RUST_COMMANDS.COPY_DIR, { source, destination })
+  // Mirror, not overlay: the dedicated `debug_save` subfolder is cleared then re-copied so it always
+  // matches the synced branch exactly (no stale saves from upstream removals or another branch).
+  await invoke(RUST_COMMANDS.MIRROR_DIR, { source, destination })
 }
 
 type PatchAndLaunchGameParams = {
   gameFolder: string
-  utmtCliFolder: string
   gitFolder: string
   savesFolder: string
   files: PatchGameTranslationFile[]
@@ -42,8 +43,7 @@ export const patchAndLaunchGame = async ({
   files,
   gameFolder,
   gitFolder,
-  savesFolder,
-  utmtCliFolder
+  savesFolder
 }: PatchAndLaunchGameParams) => {
   await copyDebugSaves({ gitFolder, savesFolder })
 
@@ -75,7 +75,6 @@ export const patchAndLaunchGame = async ({
       await invoke(RUST_COMMANDS.IMPORT_STRINGS, {
         sourceDataWinPath: originalFilePathInGameFolder,
         outputDataWinPath: outputFilePath,
-        utmtCliFolderPath: utmtCliFolder,
         gitChapterFolderPath: chapterDirInGitFolder,
         gitRootFolderPath: gitFolder,
         chapter: parseInt(matches[1], 10)

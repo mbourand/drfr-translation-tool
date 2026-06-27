@@ -138,6 +138,7 @@ export const EditTranslationView = () => {
         footer={
           <>
             <LaunchGameButton
+              branch={ENV.GITHUB_BASE_BRANCH}
               files={(files ?? []).map((file) => ({
                 pathInGameFolder: file.pathInGameFolder,
                 content: file.lines

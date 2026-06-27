@@ -115,7 +115,7 @@ The Deltarune Steam installation directory the translator points the tool at, so
 _Avoid_: game directory, install path.
 
 **UTMT CLI**:
-UndertaleModTool's command-line patcher (UndertaleModCli) the tool drives to import translated strings into a chapter's binary Data file.
+UndertaleModTool's command-line patcher (UndertaleModCli) the tool drives to import translated strings into a chapter's binary Data file. Bundled with the app as a pinned Tauri resource (fetched per-platform by CI) and resolved from the app's resource directory — the user neither installs nor selects it.
 _Avoid_: UndertaleModCli.exe, UMT, the modding tool.
 
 **Patch target**:
