@@ -1,4 +1,4 @@
-name: 'publish'
+name: "publish"
 
 on:
   # Allow running this workflow manually from the Actions tab.
@@ -8,8 +8,8 @@ on:
       - main
     paths:
       # Monorepo: only build the desktop app when its files (or this workflow) change.
-      - 'apps/desktop/**'
-      - '.github/workflows/build.yml'
+      - "apps/desktop/**"
+      - ".github/workflows/build.yml"
 
 jobs:
   publish-tauri:
@@ -19,21 +19,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest' # for Arm based macs (M1 and above).
-            args: '--target universal-apple-darwin'
-            utmt_asset: 'UTMT_CLI_v0.8.2.0-macOS.zip'
-          - platform: 'macos-latest' # for Intel based macs.
-            args: '--target x86_64-apple-darwin'
-            utmt_asset: 'UTMT_CLI_v0.8.2.0-macOS.zip'
-          - platform: 'ubuntu-22.04' # for Tauri v1 you could replace this with ubuntu-20.04.
+          - platform: "macos-latest" # for Arm based macs (M1 and above).
+            args: "--target universal-apple-darwin"
+            utmt_asset: "UTMT_CLI_v0.8.2.0-macOS.zip"
+          - platform: "macos-latest" # for Intel based macs.
+            args: "--target x86_64-apple-darwin"
+            utmt_asset: "UTMT_CLI_v0.8.2.0-macOS.zip"
+          - platform: "ubuntu-22.04" # for Tauri v1 you could replace this with ubuntu-20.04.
             # Skip the AppImage target: it runs linuxdeploy, which scans every ELF in the
             # AppDir and chokes on the bundled .NET UTMT runtime (libcoreclr.so et al.).
             # deb/rpm just copy resources, so they bundle UTMT fine.
-            args: '--bundles deb,rpm'
-            utmt_asset: 'UTMT_CLI_v0.8.2.0-Ubuntu.zip'
-          - platform: 'windows-latest'
-            args: ''
-            utmt_asset: 'UTMT_CLI_v0.8.2.0-Windows.zip'
+            args: "--bundles deb,rpm"
+            utmt_asset: "UTMT_CLI_v0.8.2.0-Ubuntu.zip"
+          - platform: "windows-latest"
+            args: ""
+            utmt_asset: "UTMT_CLI_v0.8.2.0-Windows.zip"
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -86,12 +86,13 @@ jobs:
           VITE_TRANSLATION_API_BASE_URL: ${{ secrets.VITE_TRANSLATION_API_BASE_URL }}
           VITE_DRFR_WEBSITE_URL: ${{ secrets.VITE_DRFR_WEBSITE_URL }}
           VITE_GITHUB_BASE_BRANCH: ${{ secrets.VITE_GITHUB_BASE_BRANCH }}
+          VITE_GITHUB_BETA_BRANCH: ${{ secrets.VITE_GITHUB_BETA_BRANCH }}
 
         with:
           projectPath: apps/desktop # Monorepo: the Tauri app lives in this subdirectory.
           tagName: app-v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
-          releaseName: 'App v__VERSION__'
-          releaseBody: 'See the assets to download this version and install.'
+          releaseName: "App v__VERSION__"
+          releaseBody: "See the assets to download this version and install."
           releaseDraft: true
           prerelease: false
           includeDebug: true
