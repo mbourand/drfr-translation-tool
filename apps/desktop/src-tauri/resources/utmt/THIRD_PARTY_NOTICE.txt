@@ -1,0 +1,20 @@
+Third-party software notice — UndertaleModTool (UTMT)
+====================================================
+
+This application bundles the UndertaleModTool CLI ("UndertaleModCli"),
+pinned to version v0.8.2.0, in this directory.
+
+UndertaleModTool is Copyright (c) the UnderminersTeam and contributors,
+and is licensed under the GNU General Public License, version 3.0 (GPL-3.0).
+
+The full license text is distributed alongside this notice as LICENSE.txt
+(included in the upstream release archive bundled here by CI).
+
+In accordance with the GPL-3.0, the complete corresponding source code for
+the bundled version is publicly available at:
+
+    https://github.com/UnderminersTeam/UndertaleModTool/releases/tag/0.8.2.0
+
+The CLI binaries in this folder are fetched and unzipped during the release
+build (see .github/workflows/build.yml) and are not committed to this
+repository.

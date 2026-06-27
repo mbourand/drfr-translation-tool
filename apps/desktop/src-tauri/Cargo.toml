@@ -37,3 +37,8 @@ tauri-plugin-os = "2"
 # 2.9.3 does not implement). The JS counterpart (package.json) tracks 2.x independently.
 tauri-plugin-clipboard-manager = "=2.3.0"
 
+[dev-dependencies]
+# Used only by unit tests to synthesize GitHub-style fixture zips. Pinned to the version already in
+# Cargo.lock via zip-extract, so it adds no new crate to the build graph.
+zip = "4.0"
+

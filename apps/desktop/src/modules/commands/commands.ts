@@ -3,6 +3,9 @@ export const RUST_COMMANDS = {
   RUN_GAME_EXECUTABLE: 'run_game_executable',
   UNZIP_FILE: 'unzip_file',
   COPY_DIR: 'copy_dir',
+  MIRROR_DIR: 'mirror_dir',
   IS_DEV: 'is_dev',
-  PULL_CHANGES_FROM_GIT: 'pull_changes_from_git'
+  SYNC_BRANCH_FROM_ZIP: 'sync_branch_from_zip',
+  BRANCH_NEEDS_SYNC: 'branch_needs_sync',
+  BRANCH_LOCAL_DIR: 'branch_local_dir'
 }

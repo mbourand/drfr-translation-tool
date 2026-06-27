@@ -29,6 +29,12 @@
           "url": "https://deltarune-fr.com/*"
         },
         {
+          "url": "https://api.github.com/*"
+        },
+        {
+          "url": "https://codeload.github.com/*"
+        },
+        {
           "url": "http://localhost:1420/*"
         },
         {
