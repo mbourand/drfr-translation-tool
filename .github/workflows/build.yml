@@ -26,7 +26,10 @@ jobs:
             args: '--target x86_64-apple-darwin'
             utmt_asset: 'UTMT_CLI_v0.8.2.0-macOS.zip'
           - platform: 'ubuntu-22.04' # for Tauri v1 you could replace this with ubuntu-20.04.
-            args: ''
+            # Skip the AppImage target: it runs linuxdeploy, which scans every ELF in the
+            # AppDir and chokes on the bundled .NET UTMT runtime (libcoreclr.so et al.).
+            # deb/rpm just copy resources, so they bundle UTMT fine.
+            args: '--bundles deb,rpm'
             utmt_asset: 'UTMT_CLI_v0.8.2.0-Ubuntu.zip'
           - platform: 'windows-latest'
             args: ''
