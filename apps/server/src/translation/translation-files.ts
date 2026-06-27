@@ -58,6 +58,13 @@ export const TRANSLATION_FILES: TranslationFile[] = [
     name: 'Strings du chapitre 4',
     category: 'Chapitre 4',
     pathInGameFolder: 'chapter4_windows/data.win'
+  },
+  {
+    original: 'chapitre-5/strings_en.txt',
+    translated: 'chapitre-5/strings_fr.txt',
+    name: 'Strings du chapitre 5',
+    category: 'Chapitre 5',
+    pathInGameFolder: 'chapter5_windows/data.win'
   }
 ]
 
