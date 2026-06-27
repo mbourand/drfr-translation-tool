@@ -30,12 +30,17 @@ fn launch_action(os: &str, game_folder_path: &str) -> LaunchAction {
     }
 }
 
-/// Pure decision: the UTMT CLI binary path inside the bundled resource folder. The native Linux
-/// build has no extension; Windows (and macOS, left unchanged) use `UndertaleModCli.exe`.
-fn utmt_program_path(os: &str, utmt_cli_folder_path: &str) -> String {
+/// Pure decision: the UTMT CLI binary's file name for the host OS. The native Linux build has no
+/// extension; Windows (and macOS, left unchanged) use `UndertaleModCli.exe`. The caller joins this
+/// onto the resolved resource folder with `PathBuf::join` so the OS-native separator is used — on
+/// Windows the resource directory comes back as an extended-length `\\?\` verbatim path, in which a
+/// forward slash is a literal filename character (not a separator), so building the path with `/`
+/// would make `CreateProcess` fail with ERROR_INVALID_NAME (os error 123). This only surfaces in the
+/// packaged app: in dev the resource resolves to a normal path where Windows normalizes `/` to `\`.
+fn utmt_program_name(os: &str) -> &'static str {
     match os {
-        "linux" => format!("{}/UndertaleModCli", utmt_cli_folder_path),
-        _ => format!("{}/UndertaleModCli.exe", utmt_cli_folder_path),
+        "linux" => "UndertaleModCli",
+        _ => "UndertaleModCli.exe",
     }
 }
 
@@ -92,14 +97,17 @@ async fn import_strings(
         .path()
         .resolve(BUNDLED_UTMT_RESOURCE_DIR, BaseDirectory::Resource)
         .map_err(|e| format!("Failed to resolve bundled UTMT resource directory: {}", e))?;
-    let utmt_cli_folder_path = utmt_cli_folder_path
-        .to_str()
-        .ok_or("Bundled UTMT resource directory path is not valid UTF-8")?;
 
-    let utmt_cli_program_path = utmt_program_path(std::env::consts::OS, utmt_cli_folder_path);
+    // Join with `PathBuf::join` (OS-native separator), never `format!("{}/...")`: on Windows the
+    // resolved resource path is an extended-length `\\?\` verbatim path where a `/` is a literal
+    // character, which would make the spawn fail with ERROR_INVALID_NAME (os error 123).
+    let utmt_cli_program_path = utmt_cli_folder_path.join(utmt_program_name(std::env::consts::OS));
 
     if utmt_needs_exec_bit(std::env::consts::OS) {
-        ensure_executable(&utmt_cli_program_path)?;
+        let utmt_cli_program_path = utmt_cli_program_path
+            .to_str()
+            .ok_or("Bundled UTMT CLI path is not valid UTF-8")?;
+        ensure_executable(utmt_cli_program_path)?;
     }
 
     let debug_mode_script_path = format!(
@@ -526,13 +534,13 @@ mod tests {
 
     #[test]
     fn windows_drives_the_exe_utmt_cli() {
-        assert!(utmt_program_path("windows", "C:/utmt").ends_with("UndertaleModCli.exe"));
+        assert_eq!(utmt_program_name("windows"), "UndertaleModCli.exe");
     }
 
     #[test]
     fn linux_drives_the_extensionless_utmt_cli() {
-        let program = utmt_program_path("linux", "/opt/utmt");
-        assert!(program.ends_with("UndertaleModCli"));
+        let program = utmt_program_name("linux");
+        assert_eq!(program, "UndertaleModCli");
         assert!(!program.ends_with(".exe"));
     }
 
