@@ -10,6 +10,7 @@ import { GithubAuthGuard } from '@/auth/github-auth.guard'
 import { PullRequestsService } from './pull-requests.service'
 import { ScreenshotsService } from './screenshots.service'
 import { ScreenshotsPruneService } from './screenshots-prune.service'
+import { TextsProgressionService } from './texts-progression.service'
 
 @Module({
   controllers: [TranslationController],
@@ -19,6 +20,7 @@ import { ScreenshotsPruneService } from './screenshots-prune.service'
     PullRequestsService,
     ScreenshotsService,
     ScreenshotsPruneService,
+    TextsProgressionService,
     GithubAuthGuard
   ],
   imports: [HttpModule, RoutesModule, GithubModule, RepositoryModule]
