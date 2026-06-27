@@ -1,46 +1,35 @@
 import { Modal } from '../../../../components/Modal'
 import { patchAndLaunchGame, PatchGameTranslationFile } from '../../../../modules/game/launch'
+import { ensureBranchSynced, FirstTimeSetupError, SyncAuthError } from '../../../../modules/game/sync'
 import { open } from '@tauri-apps/plugin-dialog'
 import { store, STORE_KEYS } from '../../../../store/store'
 import { useQuery } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { repairGameFiles } from '../../../../modules/game/repair'
-import { invoke } from '@tauri-apps/api/core'
-import { RUST_COMMANDS } from '../../../../modules/commands/commands'
 import { platform } from '@tauri-apps/plugin-os'
+import { useNavigate } from 'react-router'
+import { logout } from '../../../../modules/auth/login'
+import { TRANSLATION_APP_PAGES } from '../../../../routes/pages/routes'
+
+// Offline-fallback notice shown when an update check/download failed but a cached copy was launched.
+const OFFLINE_FALLBACK_LAUNCH_NOTICE =
+  'Impossible de vérifier les mises à jour — lancement avec votre version actuelle.'
 
 type LaunchGameModalProps = {
   isVisible: boolean
   onClose: () => void
+  // The patcher branch to sync, patch, and launch from — `master` for edit/review, `beta` for Beta
+  // QA. Each branch keeps its own `patcher/<branch>/` copy, so switching modes never re-downloads.
+  branch: string
   files: PatchGameTranslationFile[]
   changes: Map<string, string>
 }
 
-export const LaunchGameModal = ({ onClose, isVisible, files, changes }: LaunchGameModalProps) => {
+export const LaunchGameModal = ({ onClose, isVisible, branch, files, changes }: LaunchGameModalProps) => {
   const { data: gameFolder, refetch: refetchGameFolder } = useQuery({
     queryKey: [STORE_KEYS.GAME_FOLDER_PATH],
     queryFn: async () => {
       const folder = await store.get<string>(STORE_KEYS.GAME_FOLDER_PATH)
-      return folder ?? null
-    },
-    refetchOnWindowFocus: false,
-    refetchOnMount: false
-  })
-
-  const { data: utmtCliFolder, refetch: refetchUtmtCliFolder } = useQuery({
-    queryKey: [STORE_KEYS.UTMT_CLI_FOLDER_PATH],
-    queryFn: async () => {
-      const folder = await store.get<string>(STORE_KEYS.UTMT_CLI_FOLDER_PATH)
-      return folder ?? null
-    },
-    refetchOnWindowFocus: false,
-    refetchOnMount: false
-  })
-
-  const { data: gitFolder, refetch: refetchGitFolder } = useQuery({
-    queryKey: [STORE_KEYS.GIT_FOLDER_PATH],
-    queryFn: async () => {
-      const folder = await store.get<string>(STORE_KEYS.GIT_FOLDER_PATH)
       return folder ?? null
     },
     refetchOnWindowFocus: false,
@@ -59,6 +48,16 @@ export const LaunchGameModal = ({ onClose, isVisible, files, changes }: LaunchGa
 
   const [isLoading, setIsLoading] = useState(false)
   const onlyPatchChangedFilesInputRef = useRef<HTMLInputElement>(null)
+  const navigate = useNavigate()
+
+  // An expired GitHub session can't be recovered in place: drop the stored token and route the user
+  // through the normal re-login. Returns true when it handled the error so callers can stop there.
+  const handleSyncAuthError = async (error: unknown): Promise<boolean> => {
+    if (!(error instanceof SyncAuthError)) return false
+    await logout()
+    await navigate(TRANSLATION_APP_PAGES.AUTH.LOGIN)
+    return true
+  }
 
   // On Linux, Deltarune runs as the Windows build through Steam Proton, so its saves live inside
   // the Proton prefix rather than a native location. The picker stays manual (like the other three
@@ -92,25 +91,33 @@ export const LaunchGameModal = ({ onClose, isVisible, files, changes }: LaunchGa
           <button
             className="float-right btn btn-soft"
             onClick={async () => {
-              if (!gitFolder) return
-
               try {
-                await invoke(RUST_COMMANDS.PULL_CHANGES_FROM_GIT, { gitFolder })
-                alert('La mise à jour des fichiers a été effectuée avec succès.')
+                setIsLoading(true)
+                // Force-refresh: re-download regardless of the stored SHA (the manual escape hatch).
+                const { status } = await ensureBranchSynced(branch, { force: true })
+                if (status === 'offline-fallback') {
+                  alert('Impossible de vérifier les mises à jour. Votre version actuelle est conservée.')
+                } else {
+                  alert('La mise à jour des fichiers a été effectuée avec succès.')
+                }
               } catch (error) {
-                console.error('Error pulling changes from git:')
+                if (await handleSyncAuthError(error)) return
+                if (error instanceof FirstTimeSetupError) return alert(error.message)
+                console.error('Error syncing branch content:')
                 console.error(error)
                 alert(`La mise à jour a échoué. Erreur: ${error}. Vérifiez les logs pour plus d'informations.`)
+              } finally {
+                setIsLoading(false)
               }
             }}
           >
-            Mettre à jour les fichiers git
+            Mettre à jour les fichiers
           </button>
           <button
-            disabled={!gameFolder || !utmtCliFolder}
+            disabled={!gameFolder || !savesFolder}
             className="float-right btn btn-primary"
             onClick={async () => {
-              if (!gameFolder || !utmtCliFolder || !gitFolder || !savesFolder) return
+              if (!gameFolder || !savesFolder) return
 
               const changesArray = Array.from(changes.entries())
 
@@ -119,15 +126,27 @@ export const LaunchGameModal = ({ onClose, isVisible, files, changes }: LaunchGa
                 : files
 
               setIsLoading(true)
-              await patchAndLaunchGame({
-                gameFolder,
-                utmtCliFolder,
-                gitFolder,
-                savesFolder,
-                files: filesToPatch
-              })
-              setIsLoading(false)
-              onClose()
+              try {
+                // Ensure the target branch is fresh before patching: SHA-gated so an unchanged branch
+                // skips the download, fail-soft so an offline blip still launches from the last-good copy.
+                const { gitFolder, status } = await ensureBranchSynced(branch)
+                if (status === 'offline-fallback') alert(OFFLINE_FALLBACK_LAUNCH_NOTICE)
+                await patchAndLaunchGame({
+                  gameFolder,
+                  gitFolder,
+                  savesFolder,
+                  files: filesToPatch
+                })
+                onClose()
+              } catch (error) {
+                if (await handleSyncAuthError(error)) return
+                if (error instanceof FirstTimeSetupError) return alert(error.message)
+                console.error('Error launching the game:')
+                console.error(error)
+                alert(`Le lancement a échoué. Erreur: ${error}. Vérifiez les logs pour plus d'informations.`)
+              } finally {
+                setIsLoading(false)
+              }
             }}
           >
             {isLoading && <span className="loading loading-spinner" />}
@@ -157,50 +176,6 @@ export const LaunchGameModal = ({ onClose, isVisible, files, changes }: LaunchGa
             }}
           >
             {gameFolder ?? 'Sélectionner un dossier'}
-          </button>
-        </div>
-        <div className="flex flex-col gap-2">
-          <label htmlFor="select-utmt-folder">Sélectionnez le dossier d'UTMT CLI</label>
-          <button
-            id="select-utmt-folder"
-            className="btn btn-soft"
-            onClick={async () => {
-              const selected = await open({
-                multiple: false,
-                directory: true,
-                title: "Sélectionnez le dossier d'UTMT CLI"
-              })
-
-              if (selected && typeof selected === 'string') {
-                await store.set(STORE_KEYS.UTMT_CLI_FOLDER_PATH, selected)
-                await store.save()
-                refetchUtmtCliFolder()
-              }
-            }}
-          >
-            {utmtCliFolder ?? 'Sélectionner un dossier'}
-          </button>
-        </div>
-        <div className="flex flex-col gap-2">
-          <label htmlFor="select-git-folder">Sélectionnez le dossier du repo git du Patch FR</label>
-          <button
-            id="select-git-folder"
-            className="btn btn-soft"
-            onClick={async () => {
-              const selected = await open({
-                multiple: false,
-                directory: true,
-                title: 'Sélectionnez le dossier du dépôt git'
-              })
-
-              if (selected && typeof selected === 'string') {
-                await store.set(STORE_KEYS.GIT_FOLDER_PATH, selected)
-                await store.save()
-                refetchGitFolder()
-              }
-            }}
-          >
-            {gitFolder ?? 'Sélectionner un dossier'}
           </button>
         </div>
         <div className="flex flex-col gap-2">

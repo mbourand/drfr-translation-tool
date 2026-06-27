@@ -311,6 +311,7 @@ export const ReviewTranslationView = () => {
         footer={
           <>
             <LaunchGameButton
+              branch={ENV.GITHUB_BASE_BRANCH}
               files={(gridFiles ?? []).map((file) => ({
                 pathInGameFolder: file.pathInGameFolder,
                 content: file.lines

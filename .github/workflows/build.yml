@@ -19,12 +19,16 @@ jobs:
         include:
           - platform: 'macos-latest' # for Arm based macs (M1 and above).
             args: '--target universal-apple-darwin'
+            utmt_asset: 'UTMT_CLI_v0.8.2.0-macOS.zip'
           - platform: 'macos-latest' # for Intel based macs.
             args: '--target x86_64-apple-darwin'
+            utmt_asset: 'UTMT_CLI_v0.8.2.0-macOS.zip'
           - platform: 'ubuntu-22.04' # for Tauri v1 you could replace this with ubuntu-20.04.
             args: ''
+            utmt_asset: 'UTMT_CLI_v0.8.2.0-Ubuntu.zip'
           - platform: 'windows-latest'
             args: ''
+            utmt_asset: 'UTMT_CLI_v0.8.2.0-Windows.zip'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -52,6 +56,22 @@ jobs:
       - name: install frontend dependencies
         working-directory: apps/desktop
         run: npm install # change this to npm, pnpm or bun depending on which one you use.
+
+      # Bundle the pinned, self-contained UndertaleModCli (UTMT) so users never install or pick it.
+      # The matching per-platform asset is fetched and unzipped into the Tauri resource folder
+      # (apps/desktop/src-tauri/resources/utmt) that tauri.conf.json bundles into the installer.
+      - name: bundle UTMT CLI (${{ matrix.utmt_asset }})
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $dest = "apps/desktop/src-tauri/resources/utmt"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          gh release download 0.8.2.0 --repo UnderminersTeam/UndertaleModTool --pattern "${{ matrix.utmt_asset }}" --dir "$env:RUNNER_TEMP" --clobber
+          Expand-Archive -Path "$env:RUNNER_TEMP/${{ matrix.utmt_asset }}" -DestinationPath $dest -Force
+          if (-not (Test-Path "$dest/UndertaleModCli") -and -not (Test-Path "$dest/UndertaleModCli.exe")) {
+            throw "UndertaleModCli not found in $dest after extracting ${{ matrix.utmt_asset }}"
+          }
 
       - uses: tauri-apps/tauri-action@v0.5.20
         env:

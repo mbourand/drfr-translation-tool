@@ -24,3 +24,9 @@ dist-ssr
 *.sw?
 .vscode
 .env
+
+# Bundled UTMT CLI payload — fetched + unzipped by CI before `tauri build`, never committed.
+# Keep the folder (and its license/source notice) tracked so the resource path always exists.
+src-tauri/resources/utmt/*
+!src-tauri/resources/utmt/.gitkeep
+!src-tauri/resources/utmt/THIRD_PARTY_NOTICE.txt
