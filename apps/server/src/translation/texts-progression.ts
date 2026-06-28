@@ -14,11 +14,26 @@ const splitLines = (text: string): string[] => text.replaceAll('\r', '').split('
 
 const isTranslatable = (line: string): boolean => line.length >= MIN_TRANSLATABLE_LENGTH && !isTechnicalString(line)
 
-export const computeTextsPercentage = (
+export type TextsBreakdown = {
+  /** Translated lines counted before removing the automatically translated ones. */
+  translated: number
+  /** Total translatable lines before removing the automatically translated ones. */
+  translatable: number
+  /** Number of lines that were automatically translated. */
+  autoTranslatedLines: number
+  /** Translated lines after subtracting the automatically translated ones. */
+  relevantTranslated: number
+  /** Total translatable lines after subtracting the automatically translated ones. */
+  relevantTotal: number
+  /** Final progression percentage. */
+  percent: number
+}
+
+export const computeTextsBreakdown = (
   originalText: string,
   translatedText: string,
   autoTranslatedLines = 0
-): number => {
+): TextsBreakdown => {
   const originalLines = splitLines(originalText)
   const translatedLines = splitLines(translatedText)
 
@@ -35,6 +50,10 @@ export const computeTextsPercentage = (
 
   const relevantTranslated = translated - autoTranslatedLines
   const relevantTotal = translatable - autoTranslatedLines
-  if (relevantTotal <= 0) return 0
-  return Math.round((relevantTranslated / relevantTotal) * 100)
+  const percent = relevantTotal <= 0 ? 0 : Math.round((relevantTranslated / relevantTotal) * 100)
+
+  return { translated, translatable, autoTranslatedLines, relevantTranslated, relevantTotal, percent }
 }
+
+export const computeTextsPercentage = (originalText: string, translatedText: string, autoTranslatedLines = 0): number =>
+  computeTextsBreakdown(originalText, translatedText, autoTranslatedLines).percent

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { EnvironmentVariables } from '@/env'
@@ -6,15 +6,15 @@ import { GithubHttpService } from '@/github/http.service'
 import { ChapterKey, ProgressionService } from '@/progression/progression.service'
 import { RepositoryContext } from '@/repository/repository.context'
 import { RoutesService } from '@/routes/routes.service'
-import { computeTextsPercentage } from './texts-progression'
+import { computeTextsBreakdown } from './texts-progression'
 import { translationFiles } from './translation-files'
 
 const AUTO_TRANSLATED_LINES: Partial<Record<ChapterKey, number>> = {
-  chapter5: 4995
+  chapter5: 3635
 }
 
 @Injectable()
-export class TextsProgressionService {
+export class TextsProgressionService implements OnModuleInit {
   private readonly logger = new Logger(TextsProgressionService.name)
 
   constructor(
@@ -24,6 +24,10 @@ export class TextsProgressionService {
     private readonly repositoryContext: RepositoryContext,
     private readonly progressionService: ProgressionService
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.refreshTextsProgression()
+  }
 
   @Cron(CronExpression.EVERY_6_HOURS)
   async refreshTextsProgression(): Promise<void> {
@@ -43,9 +47,13 @@ export class TextsProgressionService {
         this.fetchFile(pair.original),
         this.fetchFile(pair.translated)
       ])
-      const percent = computeTextsPercentage(originalText, translatedText, AUTO_TRANSLATED_LINES[chapter] ?? 0)
-      this.progressionService.setTextsProgression(chapter, percent)
-      this.logger.log(`Texts progression for ${chapter}: ${percent}%`)
+      const breakdown = computeTextsBreakdown(originalText, translatedText, AUTO_TRANSLATED_LINES[chapter] ?? 0)
+      this.progressionService.setTextsProgression(chapter, breakdown.percent)
+      this.logger.log(
+        `Texts progression for ${chapter}: ${breakdown.percent}% ` +
+          `(${breakdown.translated} translated lines before / ${breakdown.relevantTranslated} after ` +
+          `removing ${breakdown.autoTranslatedLines} auto-translated lines)`
+      )
     } catch (error) {
       this.logger.error(`Failed to compute texts progression for ${chapter}`, error as Error)
     }
