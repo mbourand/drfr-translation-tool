@@ -8,6 +8,7 @@ import { OverviewView } from './views/Overview/OverviewView'
 import { EditTranslationView } from './views/translation/edit/EditTranslationView'
 import { ReviewTranslationView } from './views/translation/review/ReviewTranslationView'
 import { BetaQaView } from './views/translation/beta-qa/BetaQaView'
+import { ViewTranslationView } from './views/translation/view/ViewTranslationView'
 import { stopOAuthServer } from './lib/oauth'
 import { store, STORE_KEYS } from './store/store'
 import { Toaster } from './components/Toaster/Toaster'
@@ -36,6 +37,7 @@ function App() {
           <Route path={TRANSLATION_APP_PAGES.OVERVIEW} element={<OverviewView />} />
           <Route path={TRANSLATION_APP_PAGES.TRANSLATION.EDIT(':branch')} element={<EditTranslationView />}></Route>
           <Route path={TRANSLATION_APP_PAGES.TRANSLATION.REVIEW(':branch')} element={<ReviewTranslationView />}></Route>
+          <Route path={TRANSLATION_APP_PAGES.VIEW} element={<ViewTranslationView />} />
           <Route path={TRANSLATION_APP_PAGES.BETA_QA} element={<BetaQaView />} />
         </Routes>
       </BrowserRouter>

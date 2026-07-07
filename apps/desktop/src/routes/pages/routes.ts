@@ -16,6 +16,7 @@ export const TRANSLATION_APP_PAGES = {
     }
   },
   OVERVIEW: '/overview',
+  VIEW: '/view',
   BETA_QA: '/beta-qa',
   PATCH_FILES: '/translation-tool/scripts.zip'
 } as const
