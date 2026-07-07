@@ -15,7 +15,7 @@
     "opener:default",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "steam://*" }]
+      "allow": [{ "url": "steam://*" }, { "url": "https://app.notion.com/*" }, { "url": "https://www.notion.so/*" }]
     },
     "core:window:allow-close",
     "core:window:allow-destroy",

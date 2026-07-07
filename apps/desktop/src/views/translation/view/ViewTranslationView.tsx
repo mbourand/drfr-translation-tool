@@ -12,6 +12,7 @@ import { TranslationStringSearch } from '../edit/TranslationStringSearch'
 import { isRowVisible } from '../isCellVisible'
 import { LaunchGameButton } from '../edit/SidePanel/LaunchGameButton'
 import { TranslationGrid } from '../edit/TranslationGrid'
+import { NotionButton } from '../../../components/NotionButton'
 
 // Read-only viewer of the canonical translation (the base branch) — browse the strings and launch
 // the game, without creating a PR or editing anything.
@@ -57,7 +58,12 @@ export const ViewTranslationView = () => {
         categories={filesByCategory}
         onSelected={setSelectedFile}
         selected={selectedFile}
-        footer={<LaunchGameButton branch={ENV.GITHUB_BASE_BRANCH} files={launchFiles} changes={NO_CHANGES} />}
+        footer={
+          <>
+            <NotionButton variant="footer" />
+            <LaunchGameButton branch={ENV.GITHUB_BASE_BRANCH} files={launchFiles} changes={NO_CHANGES} />
+          </>
+        }
       />
       <div className="flex flex-col items-center w-full px-4">
         <div className="flex flex-row w-full items-center mb-4 pt-2">

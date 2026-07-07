@@ -11,6 +11,7 @@ import { TRANSLATION_APP_PAGES } from '../../routes/pages/routes'
 import { useNavigate } from 'react-router'
 import { reviewSignoffs } from '../../modules/prMarkers/reviewSignoffs'
 import { pruneReviewedLines } from '../../modules/qa-review/reviewedLines'
+import { NotionButton } from '../../components/NotionButton'
 
 const TRANSLATION_LABEL = 'Traduction'
 const WIP_LABEL = 'En cours'
@@ -158,6 +159,7 @@ export const OverviewView = () => {
       <main className="h-screen mx-auto max-w-[1700px] w-full flex flex-col gap-6 py-8 px-4">
         <div className="flex flex-row items-center gap-3">
           <h1 className="text-center text-4xl font-bold flex-1">Vue d'ensemble</h1>
+          <NotionButton />
           <ViewTranslationsButton />
           <BetaQaButton />
           <LogoutButton />

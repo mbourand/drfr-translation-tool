@@ -16,6 +16,7 @@ import { isRowVisible } from '../isCellVisible'
 import { DialogVisualizer } from '../../../components/DialogVisualizer/DialogVisualizer'
 import { UnsavedChangesModal } from '../review/UnsavedChangesModal'
 import { ENV } from '../../../Env'
+import { NotionButton } from '../../../components/NotionButton'
 
 export const EditTranslationView = () => {
   const branch = useParams().branch
@@ -137,6 +138,7 @@ export const EditTranslationView = () => {
         selected={selectedFile}
         footer={
           <>
+            <NotionButton variant="footer" />
             <LaunchGameButton
               branch={ENV.GITHUB_BASE_BRANCH}
               files={(files ?? []).map((file) => ({

@@ -16,6 +16,7 @@ import { LaunchGameButton } from '../edit/SidePanel/LaunchGameButton'
 import { BetaQaGrid } from './BetaQaGrid'
 import { BetaReviewToolbar } from './BetaReviewToolbar'
 import { DEFAULT_FILTER, BetaFilterState, passesFilter, summarize } from './betaMetrics'
+import { NotionButton } from '../../../components/NotionButton'
 
 const NO_CHANGES = new Map<string, string>()
 
@@ -73,7 +74,12 @@ export const BetaQaView = () => {
         categories={filesByCategory}
         onSelected={setSelectedFile}
         selected={selectedFile}
-        footer={<LaunchGameButton branch={ENV.GITHUB_BETA_BRANCH} files={launchFiles} changes={NO_CHANGES} />}
+        footer={
+          <>
+            <NotionButton variant="footer" />
+            <LaunchGameButton branch={ENV.GITHUB_BETA_BRANCH} files={launchFiles} changes={NO_CHANGES} />
+          </>
+        }
       />
       <div className="flex flex-col items-center w-full px-4">
         <div className="flex flex-row w-full items-center mb-4 pt-2">

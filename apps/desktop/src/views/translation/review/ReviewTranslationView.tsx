@@ -28,6 +28,7 @@ import { ReviewStringSearch } from './ReviewStringSearch'
 import { isRowVisible } from '../isCellVisible'
 import { UnsavedChangesModal } from './UnsavedChangesModal'
 import { useQaReviewedLines } from '../../../hooks/useQaReviewedLines'
+import { NotionButton } from '../../../components/NotionButton'
 
 export const ReviewTranslationView = () => {
   const [searchParams] = useSearchParams()
@@ -312,6 +313,7 @@ export const ReviewTranslationView = () => {
         }}
         footer={
           <>
+            <NotionButton variant="footer" />
             <LaunchGameButton
               branch={ENV.GITHUB_BASE_BRANCH}
               files={(gridFiles ?? []).map((file) => ({
