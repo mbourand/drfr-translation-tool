@@ -19,16 +19,23 @@ const computeFileContentsAfterChanges = (files: TranslationFile[], changes: Map<
   return newFiles
 }
 
+// After this delay a save is considered failed so the UI can recover instead of waiting forever.
+const SAVE_TIMEOUT_MS = 30_000
+
 export const useSaveChanges = ({
   changes,
   files,
   branch,
-  onSaveSuccess
+  onSaveSuccess,
+  onSaveError,
+  timeoutMs = SAVE_TIMEOUT_MS
 }: {
   changes: Map<string, string>
   files: TranslationFile[]
   branch: string
   onSaveSuccess?: () => void
+  onSaveError?: (error: Error) => void
+  timeoutMs?: number
 }) => {
   return useMutation({
     mutationKey: ['save-changes'],
@@ -42,6 +49,7 @@ export const useSaveChanges = ({
 
       await authedFetch({
         route: TRANSLATION_API_URLS.TRANSLATIONS.SAVE_FILES,
+        signal: AbortSignal.timeout(timeoutMs),
         body: {
           branch,
           message: `Sauvegarde ${new Date().toLocaleString('fr-FR', {
@@ -54,6 +62,7 @@ export const useSaveChanges = ({
         }
       })
     },
-    onSuccess: onSaveSuccess
+    onSuccess: onSaveSuccess,
+    onError: onSaveError
   })
 }

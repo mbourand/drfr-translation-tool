@@ -7,7 +7,7 @@ import { useInterval } from 'react-use'
 
 const FORCED_LINE_BREAK_CHAR = ['&', '#']
 
-type BoxKind = 'legendoftenna' | 'classic' | 'shoptalk' | 'shop' | 'battle' | 'item'
+type BoxKind = 'legendoftenna' | 'classic' | 'shoptalk' | 'shop' | 'battle' | 'item' | 'adventure'
 
 type BoxType = {
   name: string
@@ -17,7 +17,9 @@ type BoxType = {
   characterWidth: number
   lineHeight: number
   hasAsteriskHandling?: boolean
+  hasAsteriskHandlingWithHead?: boolean
   autoLineBreak: boolean
+  replaceRules?: (str: string) => string
 }
 
 const BOX_CONFIGS = {
@@ -29,7 +31,21 @@ const BOX_CONFIGS = {
     maxLines: 3,
     lineHeight: 44,
     hasAsteriskHandling: true,
-    autoLineBreak: true
+    hasAsteriskHandlingWithHead: true,
+    autoLineBreak: true,
+    replaceRules: undefined
+  },
+  adventure: {
+    name: 'Vue de côté',
+    maxCharactersPerLine: 36,
+    maxCharactersWithHead: 31,
+    characterWidth: 17.8,
+    maxLines: 2,
+    lineHeight: 44,
+    hasAsteriskHandling: false,
+    hasAsteriskHandlingWithHead: true,
+    autoLineBreak: true,
+    replaceRules: (str: string) => str.replace(/~1\* /g, '* ').replace(/~2/g, '&\u00A0\u00A0')
   },
   legendoftenna: {
     name: 'The Legend of Tenna',
@@ -39,7 +55,9 @@ const BOX_CONFIGS = {
     maxLines: 3,
     lineHeight: 44,
     hasAsteriskHandling: false,
-    autoLineBreak: true
+    hasAsteriskHandlingWithHead: false,
+    autoLineBreak: true,
+    replaceRules: undefined
   },
   shoptalk: {
     name: 'Shop pleine taille',
@@ -49,7 +67,9 @@ const BOX_CONFIGS = {
     maxLines: 5,
     lineHeight: 44,
     hasAsteriskHandling: true,
-    autoLineBreak: true
+    hasAsteriskHandlingWithHead: true,
+    autoLineBreak: true,
+    replaceRules: undefined
   },
   shop: {
     name: 'Shop partie gauche',
@@ -59,7 +79,9 @@ const BOX_CONFIGS = {
     maxLines: 5,
     lineHeight: 44,
     hasAsteriskHandling: true,
-    autoLineBreak: true
+    hasAsteriskHandlingWithHead: true,
+    autoLineBreak: true,
+    replaceRules: undefined
   },
   item: {
     name: "Description d'item",
@@ -69,7 +91,9 @@ const BOX_CONFIGS = {
     maxLines: 2,
     lineHeight: 44,
     hasAsteriskHandling: false,
-    autoLineBreak: false
+    hasAsteriskHandlingWithHead: false,
+    autoLineBreak: false,
+    replaceRules: undefined
   },
   battle: {
     name: 'Combat',
@@ -79,7 +103,9 @@ const BOX_CONFIGS = {
     maxLines: Infinity,
     lineHeight: 44,
     hasAsteriskHandling: false,
-    autoLineBreak: true
+    hasAsteriskHandlingWithHead: false,
+    autoLineBreak: true,
+    replaceRules: undefined
   }
 } as const satisfies Record<BoxKind, BoxType>
 
@@ -120,15 +146,20 @@ export const DialogVisualizer = ({ getDialog }: DialogVisualizerProps) => {
   }, [])
 
   const isHeadDialog = /^\\E[A-Za-z0-9]/.test(internalDialog)
+  const hasAsteriskHandling = isHeadDialog ? config.hasAsteriskHandlingWithHead : config.hasAsteriskHandling
 
-  const sanitizedDialog = internalDialog
-    .replace(/\[RETOUR A LA LIGNE\]/g, '&')
-    .replace(/\r/g, '')
-    .replace(/\^\d/g, '')
-    .replace(/\\c[A-Z0-9]/g, '')
-    .replace(/^\\[A-Za-z][a-zA-Z0-9]/g, '')
-    .replace(/ %%$/g, '')
-    .replace(/\/%?$/g, '')
+  const sanitizedDialog = (() => {
+    const sanitizedByCommonRules = internalDialog
+      .replace(/\[RETOUR A LA LIGNE\]/g, '&')
+      .replace(/\r/g, '')
+      .replace(/\^\d/g, '')
+      .replace(/\\c[A-Z0-9]/g, '')
+      .replace(/^\\[A-Za-z][a-zA-Z0-9]/g, '')
+      .replace(/ %%$/g, '')
+      .replace(/\/%?$/g, '')
+
+    return config.replaceRules?.(sanitizedByCommonRules) ?? sanitizedByCommonRules
+  })()
 
   const lines = useMemo(() => {
     const lines: string[] = []
@@ -138,7 +169,7 @@ export const DialogVisualizer = ({ getDialog }: DialogVisualizerProps) => {
     for (let i = 0; i < sanitizedDialog.length; i++) {
       const hasLeadingAsterisk = currentLine.startsWith('*')
       const maxCharactersThisLine =
-        maxCharactersPerLineThisDialog - (config.hasAsteriskHandling && !hasLeadingAsterisk ? 2 : 0)
+        maxCharactersPerLineThisDialog - (hasAsteriskHandling && !hasLeadingAsterisk ? 2 : 0)
 
       const char = sanitizedDialog[i]
 
@@ -171,7 +202,7 @@ export const DialogVisualizer = ({ getDialog }: DialogVisualizerProps) => {
     if (currentWord) {
       const hasLeadingAsterisk = currentLine.startsWith('*')
       const maxCharactersThisLine =
-        maxCharactersPerLineThisDialog - (config.hasAsteriskHandling && !hasLeadingAsterisk ? 2 : 0)
+        maxCharactersPerLineThisDialog - (hasAsteriskHandling && !hasLeadingAsterisk ? 2 : 0)
 
       if (currentLine.length + currentWord.length > maxCharactersThisLine && config.autoLineBreak) {
         lines.push(currentLine)
@@ -226,7 +257,7 @@ export const DialogVisualizer = ({ getDialog }: DialogVisualizerProps) => {
               {lines.map((line, index) => (
                 <>
                   <span key={index}>
-                    {config.hasAsteriskHandling && !line.startsWith('*') && <>&nbsp;&nbsp;</>}
+                    {hasAsteriskHandling && !line.startsWith('*') && <>&nbsp;&nbsp;</>}
                     {line.replace(/\s/g, '\u00A0')}
                   </span>
                   <br />

@@ -10,6 +10,7 @@ import { ReviewTranslationView } from './views/translation/review/ReviewTranslat
 import { BetaQaView } from './views/translation/beta-qa/BetaQaView'
 import { stopOAuthServer } from './lib/oauth'
 import { store, STORE_KEYS } from './store/store'
+import { Toaster } from './components/Toaster/Toaster'
 
 const AuthLoginView = lazy(() => import('./views/auth/AuthLoginView').then((m) => ({ default: m.AuthLoginView })))
 const AuthConfirmView = lazy(() => import('./views/auth/AuthConfirmView').then((m) => ({ default: m.AuthConfirmView })))
@@ -39,6 +40,7 @@ function App() {
         </Routes>
       </BrowserRouter>
       <div id="modal"></div>
+      <Toaster />
     </>
   )
 }

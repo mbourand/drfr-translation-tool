@@ -1,6 +1,7 @@
 import { Modal } from '../../../../components/Modal'
 import { TranslationFile } from '../../../../types/translation'
 import { useSaveChanges } from '../../../../hooks/useSaveChanges'
+import { showToast } from '../../../../components/Toaster/toastStore'
 import { useEffect } from 'react'
 
 type SaveChangesModalProps = {
@@ -27,6 +28,10 @@ export const SaveChangesModal = ({
     onSaveSuccess: () => {
       onClose()
       onSaveSuccess?.()
+    },
+    onSaveError: () => {
+      onClose()
+      showToast('La sauvegarde a échoué, veuillez réessayer.', 'error')
     }
   })
 

@@ -17,6 +17,7 @@ export type APIRoute<Method extends HTTPMethod = HTTPMethod> = {
 type FetchDataParams<Route extends APIRoute> = {
   route: Route
   headers?: Record<string, string>
+  signal?: AbortSignal
 } & (Route extends { bodySchema: z.ZodType } ? { body: z.infer<Route['bodySchema']> } : {})
 
 const toFormData = (body: Record<string, unknown>): FormData => {
@@ -38,6 +39,7 @@ export const fetchData = async <Route extends APIRoute>(
 
   const response = await fetch(params.route.url, {
     method: params.route.method,
+    signal: params.signal,
     // Multipart bodies must not carry an explicit Content-Type — the Request layer derives the
     // `multipart/form-data; boundary=…` header from the FormData itself.
     headers: isMultipart ? { ...params.headers } : { 'Content-Type': 'application/json', ...params.headers },
