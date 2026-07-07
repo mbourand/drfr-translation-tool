@@ -19,7 +19,7 @@ export type ChapterKey = keyof Progression
 const CURATED: Progression = {
   chapter3: { bible: 100, texts: 100, textures: 100, audio: 100, test: 100 },
   chapter4: { bible: 100, texts: 100, textures: 100, audio: 100, test: 100 },
-  chapter5: { bible: 0, texts: 0, textures: 0, audio: 0, test: 0 }
+  chapter5: { bible: 90, texts: 0, textures: 0, audio: 0, test: 0 }
 }
 
 const TRACKED_CHAPTERS: ChapterKey[] = ['chapter5']
