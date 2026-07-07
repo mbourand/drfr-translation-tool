@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { EnvironmentVariables } from '@/env'
@@ -14,7 +14,7 @@ const AUTO_TRANSLATED_LINES: Partial<Record<ChapterKey, number>> = {
 }
 
 @Injectable()
-export class TextsProgressionService {
+export class TextsProgressionService implements OnModuleInit {
   private readonly logger = new Logger(TextsProgressionService.name)
 
   constructor(
@@ -25,9 +25,9 @@ export class TextsProgressionService {
     private readonly progressionService: ProgressionService
   ) {}
 
-  // async onModuleInit(): Promise<void> {
-  // await this.refreshTextsProgression()
-  // }
+  async onModuleInit(): Promise<void> {
+    await this.refreshTextsProgression()
+  }
 
   @Cron(CronExpression.EVERY_6_HOURS)
   async refreshTextsProgression(): Promise<void> {
