@@ -20,7 +20,7 @@ const computeFileContentsAfterChanges = (files: TranslationFile[], changes: Map<
 }
 
 // After this delay a save is considered failed so the UI can recover instead of waiting forever.
-const SAVE_TIMEOUT_MS = 30_000
+const SAVE_TIMEOUT_MS = 90_000
 
 export const useSaveChanges = ({
   changes,
